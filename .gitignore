@@ -1,0 +1,19 @@
+# Virtual environment
+.venv/
+
+# Python-generated files
+__pycache__/
+*.py[cod]
+
+# Test caches
+.pytest_cache/
+
+# Local secrets
+.env
+
+# Operating-system files
+.DS_Store
+Thumbs.db
+
+# Python package build metadata
+*.egg-info/
