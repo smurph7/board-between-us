@@ -1,5 +1,5 @@
 import pytest
-from app.utils.board import apply_move, create_standard_board
+from app.utils.board import apply_move, create_standard_board, next_turn, piece_belongs_to
 
 def test_standard_board_has_expected_pieces():
     board = create_standard_board()
@@ -84,3 +84,12 @@ def test_same_source_and_destination_is_rejected():
             from_square="e2",
             to_square="e2",
         )
+
+def test_piece_belongs_to_colour():
+    assert piece_belongs_to("white_pawn", "white")
+    assert not piece_belongs_to("black_pawn", "white")
+
+
+def test_next_turn_alternates_colour():
+    assert next_turn("white") == "black"
+    assert next_turn("black") == "white"

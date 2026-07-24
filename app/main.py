@@ -1,19 +1,25 @@
 from nicegui import ui
 
 from app.components.chess_board import render_chess_board
-from app.utils.board import Square, create_standard_board, apply_move
+from app.utils.board import Colour, Square, create_standard_board, apply_move, piece_belongs_to, next_turn
 
 @ui.page("/")
 def game_page() -> None:
     """Render the local game page."""
     board = create_standard_board()
     selected_square: Square | None = None
+    current_turn: Colour = "white"
 
     def handle_square_click(square: Square) -> None:
-        nonlocal board, selected_square
+        nonlocal board, selected_square, current_turn
 
         if selected_square is None:
-            if square not in board:
+            piece = board.get(square)
+
+            if piece is None:
+                return
+
+            if not piece_belongs_to(piece, current_turn):
                 return
 
             selected_square = square
@@ -28,6 +34,7 @@ def game_page() -> None:
                 to_square=square,
             )
             selected_square = None
+            current_turn = next_turn(current_turn)
 
         board_view.refresh()
 
@@ -53,6 +60,7 @@ def game_page() -> None:
         clear_selection,
     ):
         ui.label("Board Between Us")
+        ui.label(f"{current_turn.title()} to move")
         board_view()
 
 

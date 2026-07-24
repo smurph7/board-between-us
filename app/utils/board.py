@@ -1,6 +1,10 @@
+from typing import Literal
+
 type Square = str
 type Piece = str
 type BoardState = dict[Square, Piece]
+
+Colour = Literal["white", "black"]
 
 def create_standard_board() -> BoardState:
     """Return a new board containing the standard chess starting position."""
@@ -39,6 +43,14 @@ def create_standard_board() -> BoardState:
         board[f"{file}8"] = black_back_rank[index]
 
     return board
+
+def piece_belongs_to(piece: Piece, colour: Colour) -> bool:
+    """Return whether a piece belongs to the specified colour."""
+    return piece.startswith(f"{colour}_")
+
+def next_turn(current_turn: Colour) -> Colour:
+    """Return the colour whose turn follows the current turn."""
+    return {"white": "black", "black": "white"}[current_turn]
 
 def apply_move(
     board: BoardState,
