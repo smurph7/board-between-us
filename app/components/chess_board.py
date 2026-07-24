@@ -1,5 +1,8 @@
 from nicegui import ui
-from app.utils.board import BoardState
+from collections.abc import Callable
+from functools import partial
+
+from app.utils.board import BoardState, Square
 
 PIECE_SYMBOLS = {
         "white_king": "♔",
@@ -16,7 +19,11 @@ PIECE_SYMBOLS = {
         "black_pawn": "♟",
     }
 
-def render_chess_board(board: BoardState) -> None:
+def render_chess_board( 
+        board: BoardState,
+        selected_square: Square | None,
+        on_square_click: Callable[[Square], None],
+    ) -> None:
     """Render an 8×8 read-only chessboard with coordinates on all sides."""
 
     with ui.column().classes("gap-0"):
@@ -50,12 +57,18 @@ def render_chess_board(board: BoardState) -> None:
                         else "bg-amber-700"
                     )
 
+                    selection_class = (
+                        "ring-4 ring-blue-500 ring-inset"
+                        if square == selected_square
+                        else ""
+                    )
+
                     ui.label(symbol).classes(
-                        f"{background} "
+                        f"{background} {selection_class} "
                         "w-12 h-12 "
                         "flex items-center justify-center "
                         "text-3xl"
-                    )
+                    ).on("click", partial(on_square_click, square))
 
                 ui.label(str(rank)).classes(
                     "w-6 h-12 flex items-center justify-center"
