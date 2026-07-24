@@ -24,9 +24,12 @@ def render_chess_board(
         selected_square: Square | None,
         on_square_click: Callable[[Square], None],
     ) -> None:
-    """Render an 8×8 read-only chessboard with coordinates on all sides."""
+    """Render an 8x8 read-only chessboard with coordinates on all sides."""
 
-    with ui.column().classes("gap-0"):
+    with ui.column().classes("gap-0").on(
+        "click",
+        js_handler="(event) => event.stopPropagation()",
+    ):
         # Top file labels
         with ui.row().classes("gap-0"):
             ui.label("").classes("w-6")
