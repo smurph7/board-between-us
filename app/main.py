@@ -1,6 +1,7 @@
 from nicegui import ui
 
 from app.components.chess_board import render_chess_board
+from app.models.move import MoveRecord
 from app.utils.board import Colour, Square, create_standard_board, apply_move, piece_belongs_to, next_turn
 
 @ui.page("/")
@@ -9,6 +10,7 @@ def game_page() -> None:
     board = create_standard_board()
     selected_square: Square | None = None
     current_turn: Colour = "white"
+    move_history: list[MoveRecord] = []
 
     def handle_square_click(square: Square) -> None:
         nonlocal board, selected_square, current_turn
@@ -28,11 +30,27 @@ def game_page() -> None:
             selected_square = None
 
         else:
-            board, _ = apply_move(
+            from_square = selected_square
+            moving_piece = board[from_square]
+            
+            board, captured_piece = apply_move(
                 board,
-                from_square=selected_square,
+                from_square=from_square,
                 to_square=square,
             )
+
+            move_history.append(
+                MoveRecord(
+                    number=len(move_history) + 1,
+                    colour=current_turn,
+                    piece=moving_piece,
+                    from_square=from_square,
+                    to_square=square,
+                    captured_piece=captured_piece,
+                )
+            )
+
+            print(move_history)
             selected_square = None
             current_turn = next_turn(current_turn)
 
