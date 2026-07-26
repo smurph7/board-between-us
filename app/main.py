@@ -1,7 +1,6 @@
 from nicegui import ui
 
-from app.components.chess_board import render_chess_board
-from app.components.move_history import render_move_history
+from app.components.game_view import render_game_view
 from app.models.move import MoveRecord
 from app.utils.board import Colour, Square, create_standard_board, apply_move, piece_belongs_to, next_turn
 
@@ -76,18 +75,15 @@ def game_page() -> None:
 
     @ui.refreshable
     def game_view() -> None:
-        ui.label(f"{current_turn.title()} to move")
-        
-        render_chess_board(
+       render_game_view(
             board=board,
             selected_square=selected_square,
+            current_turn=current_turn,
+            move_history=move_history,
+            flipped=flipped,
             on_square_click=handle_square_click,
-            flipped=flipped
+            on_flip=toggle_orientation,
         )
-        
-        ui.button("Flip board", on_click=toggle_orientation)
-        
-        render_move_history(move_history)
     
     def clear_selection() -> None:
         nonlocal selected_square

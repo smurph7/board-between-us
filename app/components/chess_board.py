@@ -38,7 +38,7 @@ def render_chess_board(
         with ui.row().classes("gap-0"):
             ui.label("").classes("w-6")
 
-            for file_letter in "abcdefgh":
+            for file_letter in files:
                 ui.label(file_letter).classes(
                     "w-12 h-6 flex items-center justify-center"
                 )
@@ -86,7 +86,7 @@ def render_chess_board(
         with ui.row().classes("gap-0"):
             ui.label("").classes("w-6")
 
-            for file_letter in "abcdefgh":
+            for file_letter in files:
                 ui.label(file_letter).classes(
                     "w-12 h-6 flex items-center justify-center"
                 )
