@@ -9,6 +9,10 @@ description = "A shared visual chess notepad."
 requires-python = ">=3.12"
 dependencies = [
     "nicegui",
+    "sqlalchemy>=2.0,<3.0",
+    "psycopg[binary]>=3.0,<4.0",
+    "alembic>=1.13,<2.0",
+    "pydantic-settings>=2.0,<3.0",
 ]
 
 [project.optional-dependencies]

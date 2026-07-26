@@ -17,3 +17,8 @@ Thumbs.db
 
 # Python package build metadata
 *.egg-info/
+
+# neon added files
+.agents
+.neon
+skills-lock.json
