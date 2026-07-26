@@ -32,29 +32,38 @@ def game_page() -> None:
             selected_square = None
 
         else:
-            from_square = selected_square
-            moving_piece = board[from_square]
+            destination_piece = board.get(square)
             
-            board, captured_piece = apply_move(
-                board,
-                from_square=from_square,
-                to_square=square,
-            )
-
-            move_history.append(
-                MoveRecord(
-                    number=len(move_history) + 1,
-                    colour=current_turn,
-                    piece=moving_piece,
+            if (
+                destination_piece is not None
+                and piece_belongs_to(destination_piece, current_turn)
+            ):
+                selected_square = square
+            
+            else:
+                from_square = selected_square
+                moving_piece = board[from_square]
+                
+                board, captured_piece = apply_move(
+                    board,
                     from_square=from_square,
                     to_square=square,
-                    captured_piece=captured_piece,
                 )
-            )
 
-            print(move_history)
-            selected_square = None
-            current_turn = next_turn(current_turn)
+                move_history.append(
+                    MoveRecord(
+                        number=len(move_history) + 1,
+                        colour=current_turn,
+                        piece=moving_piece,
+                        from_square=from_square,
+                        to_square=square,
+                        captured_piece=captured_piece,
+                    )
+                )
+
+                print(move_history)
+                selected_square = None
+                current_turn = next_turn(current_turn)
 
         game_view.refresh()
 
