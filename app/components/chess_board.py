@@ -23,9 +23,13 @@ def render_chess_board(
         board: BoardState,
         selected_square: Square | None,
         on_square_click: Callable[[Square], None],
+        flipped: bool,
     ) -> None:
     """Render an 8x8 read-only chessboard with coordinates on all sides."""
 
+    files = "hgfedcba" if flipped else "abcdefgh"
+    ranks = range(1, 9) if flipped else range(8, 0, -1)
+    
     with ui.column().classes("gap-0").on(
         "click",
         js_handler="(event) => event.stopPropagation()",
@@ -42,13 +46,14 @@ def render_chess_board(
             ui.label("").classes("w-6")
 
         # Board rows, with rank labels on both sides
-        for rank in range(8, 0, -1):
+        for rank in ranks:
             with ui.row().classes("gap-0 items-center"):
                 ui.label(str(rank)).classes(
                     "w-6 h-12 flex items-center justify-center"
                 )
 
-                for file_index, file_letter in enumerate("abcdefgh"):
+                for file_letter in files:
+                    file_index = "abcdefgh".index(file_letter)
                     square = f"{file_letter}{rank}"
                     piece = board.get(square)
                     symbol = PIECE_SYMBOLS.get(piece, "")

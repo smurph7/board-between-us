@@ -13,6 +13,7 @@ def game_page() -> None:
     selected_square: Square | None = None
     current_turn: Colour = "white"
     move_history: list[MoveRecord] = []
+    flipped = False
 
     def handle_square_click(square: Square) -> None:
         nonlocal board, selected_square, current_turn
@@ -66,6 +67,12 @@ def game_page() -> None:
                 current_turn = next_turn(current_turn)
 
         game_view.refresh()
+        
+    def toggle_orientation() -> None:
+        nonlocal flipped
+        
+        flipped = not flipped
+        game_view.refresh()
 
     @ui.refreshable
     def game_view() -> None:
@@ -75,7 +82,10 @@ def game_page() -> None:
             board=board,
             selected_square=selected_square,
             on_square_click=handle_square_click,
+            flipped=flipped
         )
+        
+        ui.button("Flip board", on_click=toggle_orientation)
         
         render_move_history(move_history)
     
