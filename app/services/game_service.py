@@ -3,6 +3,7 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from app.config import get_settings
 from app.models.game import Game
 from app.models.player import Player
 from app.repositories.game_repository import create_game, get_game
@@ -11,7 +12,7 @@ from app.repositories.player_repository import (
     get_player_by_token_hash,
 )
 from app.services.token_service import generate_access_token, hash_access_token
-from app.utils.board import create_standard_board
+from app.utils.board import Colour, create_standard_board
 
 
 @dataclass(frozen=True)
@@ -24,6 +25,13 @@ class CreatedGame:
     white_access_token: str
     black_access_token: str
 
+@dataclass(frozen=True)
+class CreatedGameLinks:
+    game: Game
+    creator_colour: Colour
+    creator_url: str
+    opponent_url: str
+    
 
 def create_standard_game(
     session: Session,
@@ -67,6 +75,57 @@ def create_standard_game(
         white_access_token=white_access_token,
         black_access_token=black_access_token,
     )   
+
+
+def create_game_for_players(
+    session: Session,
+    *,
+    creator_display_name: str,
+    opponent_display_name: str | None,
+    creator_colour: Colour,
+    app_base_url: str,
+    name: str | None = None,
+) -> CreatedGameLinks:
+    """Create a standard game and assign private links by creator colour."""
+    if creator_colour == "white":
+        white_display_name = creator_display_name
+        black_display_name = opponent_display_name
+    else:
+        white_display_name = opponent_display_name
+        black_display_name = creator_display_name
+    
+    created_game = create_standard_game(
+        session,
+        name=name,
+        white_display_name=white_display_name,
+        black_display_name=black_display_name,
+    )
+    
+    if creator_colour == "white":
+        creator_token = created_game.white_access_token
+        opponent_token = created_game.black_access_token
+    else:
+        creator_token = created_game.black_access_token
+        opponent_token = created_game.white_access_token
+        
+    base_url = app_base_url.rstrip("/")
+    creator_url = (
+        f"{base_url}/play/"
+        f"{created_game.game.id}/{creator_token}"
+    )
+
+    opponent_url = (
+        f"{base_url}/play/"
+        f"{created_game.game.id}/{opponent_token}"
+    )
+    
+    return CreatedGameLinks(
+        game=created_game.game,
+        creator_colour=creator_colour,
+        creator_url=creator_url,
+        opponent_url=opponent_url,      
+    )
+
 
 @dataclass(frozen=True)
 class PlayerGame:

@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.models.player import Player
 from app.services.game_service import (
     create_standard_game,
+    create_game_for_players,
     load_player_game,
 )
 from app.services.token_service import hash_access_token
@@ -110,3 +111,71 @@ def test_token_cannot_be_used_for_another_game(
     )
 
     assert result is None
+    
+def access_token_from_url(url: str) -> str:
+    """Extract the raw access token from a private player URL."""
+    return url.rsplit("/", maxsplit=1)[-1]
+
+
+def test_create_game_for_white_creator_assigns_correct_links(db_session: Session) -> None:
+    result = create_game_for_players(
+        db_session,
+        name="Sunday game",
+        creator_display_name="Sarah",
+        opponent_display_name="Daniel",
+        creator_colour="white",
+        app_base_url="https://example.test/",
+    )
+
+    players = db_session.scalars(
+        select(Player).where(Player.game_id == result.game.id)
+    ).all()
+    players_by_colour = {player.colour: player for player in players}
+
+    creator_token = access_token_from_url(result.creator_url)
+    opponent_token = access_token_from_url(result.opponent_url)
+
+    assert result.creator_colour == "white"
+    assert result.game.name == "Sunday game"
+
+    assert players_by_colour["white"].display_name == "Sarah"
+    assert players_by_colour["black"].display_name == "Daniel"
+
+    assert hash_access_token(creator_token) == players_by_colour["white"].access_token_hash
+    assert hash_access_token(opponent_token) == players_by_colour["black"].access_token_hash
+
+    assert result.creator_url.startswith(
+        f"https://example.test/play/{result.game.id}/"
+    )
+
+
+def test_create_game_for_black_creator_assigns_correct_links(db_session: Session) -> None:
+    result = create_game_for_players(
+        db_session,
+        name="Sunday game",
+        creator_display_name="Sarah",
+        opponent_display_name="Daniel",
+        creator_colour="black",
+        app_base_url="https://example.test/",
+    )
+
+    players = db_session.scalars(
+        select(Player).where(Player.game_id == result.game.id)
+    ).all()
+    players_by_colour = {player.colour: player for player in players}
+
+    creator_token = access_token_from_url(result.creator_url)
+    opponent_token = access_token_from_url(result.opponent_url)
+
+    assert result.creator_colour == "black"
+    assert result.game.name == "Sunday game"
+
+    assert players_by_colour["black"].display_name == "Sarah"
+    assert players_by_colour["white"].display_name == "Daniel"
+
+    assert hash_access_token(creator_token) == players_by_colour["black"].access_token_hash
+    assert hash_access_token(opponent_token) == players_by_colour["white"].access_token_hash
+
+    assert result.creator_url.startswith(
+        f"https://example.test/play/{result.game.id}/"
+    )
