@@ -1,19 +1,21 @@
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from uuid import UUID
+from typing import cast
 
 from sqlalchemy.orm import Session
 
 from app.models.game import Game
 from app.models.persisted_move import Move
+from app.models.move import MoveRecord
 from app.repositories.game_repository import get_game_for_update
 from app.repositories.move_repository import (
     create_move,
     get_next_sequence_number,
+    list_moves
 )
 from app.repositories.player_repository import get_player
-from app.utils.board import apply_move, next_turn, piece_belongs_to
-
+from app.utils.board import apply_move, next_turn, piece_belongs_to, Colour
 
 class MoveError(Exception):
     """Base error for rejected moves."""
@@ -143,3 +145,32 @@ def make_move(
         game=game,
         move=move,
     )
+    
+
+def get_move_history(
+    session: Session,
+    game_id: UUID,
+) -> list[MoveRecord]:
+    """Return persisted ordinary moves in the UI's history format."""
+    records: list[MoveRecord] = []
+
+    for move in list_moves(session, game_id):
+        if (
+            move.piece is None
+            or move.from_square is None
+            or move.to_square is None
+        ):
+            continue
+
+        records.append(
+            MoveRecord(
+                number=move.sequence_number,
+                colour=cast(Colour, move.previous_turn),
+                piece=move.piece,
+                from_square=move.from_square,
+                to_square=move.to_square,
+                captured_piece=move.captured_piece,
+            )
+        )
+
+    return records

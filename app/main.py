@@ -4,6 +4,8 @@ from app.components.game_view import render_game_view
 from app.models.move import MoveRecord
 from app.utils.board import Colour, Square, create_standard_board, apply_move, piece_belongs_to, next_turn
 
+import app.pages.game 
+
 @ui.page("/")
 def game_page() -> None:
     """Render the local game page."""

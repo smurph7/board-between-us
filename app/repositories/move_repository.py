@@ -58,3 +58,17 @@ def create_move(
     session.flush()
 
     return move
+
+
+def list_moves(
+    session: Session,
+    game_id: UUID,
+) -> list[Move]:
+    """Return a game's moves in sequence order."""
+    statement = (
+        select(Move)
+        .where(Move.game_id == game_id)
+        .order_by(Move.sequence_number)
+    )
+
+    return list(session.scalars(statement))
