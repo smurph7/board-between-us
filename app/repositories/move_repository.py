@@ -3,7 +3,7 @@ from uuid import UUID, uuid4
 
 from sqlalchemy.orm import Session
 
-from app.models.move import Move
+from app.models.persisted_move import Move
 
 
 def create_move(
