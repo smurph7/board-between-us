@@ -47,7 +47,7 @@ def persisted_game_page(
             Colour,
             player_game.player.colour,
         )
-        game_name = player_game.game.name or "Untitled game"
+        game_name = player_game.game.name
 
         initial_state = InteractiveGameState(
             board=player_game.game.board_state.copy(),

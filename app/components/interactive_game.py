@@ -124,8 +124,7 @@ def render_interactive_game(
 
     @ui.refreshable
     def game_view() -> None:
-        if title is not None:
-            ui.label(title).classes("text-h5")
+        ui.label(title or "Board Between Us").classes("text-h5")
 
         render_game_view(
             board=state.board,

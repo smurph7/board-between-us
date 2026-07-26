@@ -88,6 +88,10 @@ def home_page() -> None:
                         "Invitation link copied",
                     ),
                 )
+            
+            ui.label(
+                "Copy these links now. They cannot be shown again after you leave this page."
+            ).classes("text-sm font-medium pt-4")
 
     with form_area:
         creator_name = (
