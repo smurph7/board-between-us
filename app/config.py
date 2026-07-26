@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     """Application configuration loaded from environment variables."""
 
     database_url: str
+    database_test_url: str | None = None
     app_base_url: str = "http://localhost:8080"
 
     model_config = SettingsConfigDict(

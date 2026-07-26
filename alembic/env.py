@@ -1,3 +1,4 @@
+import os 
 from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config
@@ -13,9 +14,22 @@ from app.config import get_settings
 
 settings = get_settings()
 
+settings = get_settings()
+
+database_url = (
+    settings.database_test_url
+    if os.getenv("USE_TEST_DATABASE") == "1"
+    else settings.database_url
+)
+
+if not database_url:
+    raise RuntimeError(
+        "DATABASE_TEST_URL is required when USE_TEST_DATABASE=1"
+    )
+
 config.set_main_option(
     "sqlalchemy.url",
-    settings.database_url.replace("%", "%%"),
+    database_url.replace("%", "%%"),
 )
 
 # Interpret the config file for Python logging.
