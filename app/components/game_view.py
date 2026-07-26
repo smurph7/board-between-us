@@ -19,7 +19,7 @@ def render_game_view(
     on_flip: Callable[[], None],
     player_colour: Colour | None = None,
 ) -> None:
-    """Render the shared game board layout."""
+    """Render the shared game board, controls, and move history."""
     if player_colour is not None:
         ui.label(f"Playing as {player_colour.title()}")
 
