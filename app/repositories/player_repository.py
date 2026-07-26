@@ -1,0 +1,28 @@
+from uuid import UUID, uuid4
+
+from sqlalchemy.orm import Session
+
+from app.models.player import Player
+
+
+def create_player(
+    session: Session,
+    *,
+    game_id: UUID,
+    colour: str,
+    access_token_hash: str,
+    display_name: str | None = None,
+) -> Player:
+    """Create a player seat in the current database transaction."""
+    player = Player(
+        id=uuid4(),
+        game_id=game_id,
+        colour=colour,
+        display_name=display_name,
+        access_token_hash=access_token_hash,
+    )
+
+    session.add(player)
+    session.flush()
+
+    return player
