@@ -3,21 +3,19 @@ from uuid import UUID
 
 from nicegui import ui
 
-from app.components.game_view import render_game_view
+from app.components.interactive_game import (
+    InteractiveGameState,
+    MoveSubmission,
+    render_interactive_game,
+)
 from app.database.session import database_session
-from app.models.move import MoveRecord
 from app.services.game_service import load_player_game
 from app.services.move_service import (
     MoveError,
     get_move_history,
     make_move,
 )
-from app.utils.board import (
-    BoardState,
-    Colour,
-    Square,
-    piece_belongs_to,
-)
+from app.utils.board import Colour, Square
 
 
 @ui.page("/play/{game_id}/{access_token}")
@@ -25,7 +23,7 @@ def persisted_game_page(
     game_id: str,
     access_token: str,
 ) -> None:
-    """Render a shared game loaded through a private player link."""
+    """Render a persisted game through a private player link."""
     try:
         parsed_game_id = UUID(game_id)
     except ValueError:
@@ -45,23 +43,31 @@ def persisted_game_page(
 
         persisted_game_id = player_game.game.id
         player_id = player_game.player.id
-        player_colour = cast(Colour, player_game.player.colour)
+        player_colour = cast(
+            Colour,
+            player_game.player.colour,
+        )
         game_name = player_game.game.name or "Untitled game"
 
-        board: BoardState = player_game.game.board_state.copy()
-        current_turn = cast(Colour, player_game.game.current_turn)
-        version = player_game.game.version
-        move_history = get_move_history(
-            session,
-            persisted_game_id,
+        initial_state = InteractiveGameState(
+            board=player_game.game.board_state.copy(),
+            current_turn=cast(
+                Colour,
+                player_game.game.current_turn,
+            ),
+            move_history=get_move_history(
+                session,
+                persisted_game_id,
+            ),
         )
 
-    selected_square: Square | None = None
-    flipped = player_colour == "black"
+        initial_version = player_game.game.version
 
-    def reload_game_state() -> None:
-        """Reload canonical state from the database."""
-        nonlocal board, current_turn, version, move_history
+    version = initial_version
+
+    def load_current_state() -> InteractiveGameState | None:
+        """Reload the canonical game state from the database."""
+        nonlocal version
 
         with database_session() as session:
             loaded = load_player_game(
@@ -71,119 +77,72 @@ def persisted_game_page(
             )
 
             if loaded is None:
-                return
+                return None
 
-            board = loaded.game.board_state.copy()
-            current_turn = cast(
-                Colour,
-                loaded.game.current_turn,
-            )
             version = loaded.game.version
-            move_history = get_move_history(
-                session,
-                persisted_game_id,
+
+            return InteractiveGameState(
+                board=loaded.game.board_state.copy(),
+                current_turn=cast(
+                    Colour,
+                    loaded.game.current_turn,
+                ),
+                move_history=get_move_history(
+                    session,
+                    persisted_game_id,
+                ),
             )
 
-    def handle_square_click(square: Square) -> None:
-        nonlocal selected_square
-        nonlocal board, current_turn, version, move_history
+    def submit_persisted_move(
+        from_square: Square,
+        to_square: Square,
+        state: InteractiveGameState,
+    ) -> MoveSubmission:
+        """Persist one move and return the latest shared state."""
+        nonlocal version
 
-        if selected_square is None:
-            if player_colour != current_turn:
-                return
-
-            piece = board.get(square)
-
-            if piece is None:
-                return
-
-            if not piece_belongs_to(piece, player_colour):
-                return
-
-            selected_square = square
-
-        elif square == selected_square:
-            selected_square = None
-
-        else:
-            destination_piece = board.get(square)
-
-            if (
-                destination_piece is not None
-                and piece_belongs_to(
-                    destination_piece,
-                    player_colour,
+        try:
+            with database_session() as session:
+                completed = make_move(
+                    session,
+                    game_id=persisted_game_id,
+                    player_id=player_id,
+                    from_square=from_square,
+                    to_square=to_square,
+                    expected_version=version,
                 )
-            ):
-                selected_square = square
 
-            else:
-                from_square = selected_square
+                version = completed.game.version
 
-                try:
-                    with database_session() as session:
-                        completed = make_move(
-                            session,
-                            game_id=persisted_game_id,
-                            player_id=player_id,
-                            from_square=from_square,
-                            to_square=square,
-                            expected_version=version,
-                        )
+                updated_state = InteractiveGameState(
+                    board=completed.game.board_state.copy(),
+                    current_turn=cast(
+                        Colour,
+                        completed.game.current_turn,
+                    ),
+                    move_history=get_move_history(
+                        session,
+                        persisted_game_id,
+                    ),
+                )
 
-                        board = completed.game.board_state.copy()
-                        current_turn = cast(
-                            Colour,
-                            completed.game.current_turn,
-                        )
-                        version = completed.game.version
-                        move_history = get_move_history(
-                            session,
-                            persisted_game_id,
-                        )
+            return MoveSubmission(
+                state=updated_state,
+                success_message="Move saved",
+            )
 
-                    ui.notify("Move saved")
+        except MoveError as error:
+            latest_state = load_current_state()
 
-                except MoveError as error:
-                    reload_game_state()
-                    ui.notify(str(error), type="negative")
+            return MoveSubmission(
+                state=latest_state or state,
+                error_message=str(error),
+            )
 
-                selected_square = None
-
-        game_view.refresh()
-
-    def toggle_orientation() -> None:
-        nonlocal flipped
-
-        flipped = not flipped
-        game_view.refresh()
-
-    def clear_selection() -> None:
-        nonlocal selected_square
-
-        if selected_square is None:
-            return
-
-        selected_square = None
-        game_view.refresh()
-
-    @ui.refreshable
-    def game_view() -> None:
-        ui.label(game_name).classes("text-h5")
-
-        render_game_view(
-            board=board,
-            selected_square=selected_square,
-            current_turn=current_turn,
-            move_history=move_history,
-            flipped=flipped,
-            on_square_click=handle_square_click,
-            on_flip=toggle_orientation,
-            player_colour=player_colour,
-        )
-
-    with ui.column().classes("w-full min-h-screen").on(
-        "click",
-        clear_selection,
-    ):
-        game_view()
+    render_interactive_game(
+        title=game_name,
+        initial_state=initial_state,
+        submit_move=submit_persisted_move,
+        player_colour=player_colour,
+        initial_flipped=player_colour == "black",
+    )
