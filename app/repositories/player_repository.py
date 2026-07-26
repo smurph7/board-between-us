@@ -1,6 +1,7 @@
 from uuid import UUID, uuid4
 
 from sqlalchemy.orm import Session
+from sqlalchemy import select
 
 from app.models.player import Player
 
@@ -34,3 +35,15 @@ def get_player(
 ) -> Player | None:
     """Return a player by ID, or None if it does not exist."""
     return session.get(Player, player_id)
+
+
+def get_player_by_token_hash(
+    session: Session,
+    access_token_hash: str,
+) -> Player | None:
+    """Return the player identified by an access-token hash."""
+    statement = select(Player).where(
+        Player.access_token_hash == access_token_hash,
+    )
+
+    return session.scalar(statement)

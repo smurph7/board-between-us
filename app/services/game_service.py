@@ -1,11 +1,15 @@
 from dataclasses import dataclass
+from uuid import UUID
 
 from sqlalchemy.orm import Session
 
 from app.models.game import Game
 from app.models.player import Player
-from app.repositories.game_repository import create_game
-from app.repositories.player_repository import create_player
+from app.repositories.game_repository import create_game, get_game
+from app.repositories.player_repository import (
+    create_player,
+    get_player_by_token_hash,
+)
 from app.services.token_service import generate_access_token, hash_access_token
 from app.utils.board import create_standard_board
 
@@ -62,4 +66,37 @@ def create_standard_game(
         black_player=black_player,
         white_access_token=white_access_token,
         black_access_token=black_access_token,
+    )   
+
+@dataclass(frozen=True)
+class PlayerGame:
+    """A game loaded through one player's private access token."""
+
+    game: Game
+    player: Player
+
+
+def load_player_game(
+    session: Session,
+    *,
+    game_id: UUID,
+    access_token: str,
+) -> PlayerGame | None:
+    """Load a game and player using a private raw access token."""
+    player = get_player_by_token_hash(
+        session,
+        hash_access_token(access_token),
+    )
+
+    if player is None or player.game_id != game_id:
+        return None
+
+    game = get_game(session, game_id)
+
+    if game is None:
+        return None
+
+    return PlayerGame(
+        game=game,
+        player=player,
     )
