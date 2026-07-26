@@ -1,8 +1,22 @@
 from uuid import UUID, uuid4
 
 from sqlalchemy.orm import Session
+from sqlalchemy import select
 
 from app.models.game import Game
+
+def get_game_for_update(
+    session: Session,
+    game_id: UUID,
+) -> Game | None:
+    """Return a game while locking it for the current transaction."""
+    statement = (
+        select(Game)
+        .where(Game.id == game_id)
+        .with_for_update()
+    )
+
+    return session.scalar(statement)
 
 
 def create_game(

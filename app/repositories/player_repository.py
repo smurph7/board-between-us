@@ -26,3 +26,11 @@ def create_player(
     session.flush()
 
     return player
+
+
+def get_player(
+    session: Session,
+    player_id: UUID,
+) -> Player | None:
+    """Return a player by ID, or None if it does not exist."""
+    return session.get(Player, player_id)

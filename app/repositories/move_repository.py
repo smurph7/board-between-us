@@ -2,8 +2,21 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from sqlalchemy.orm import Session
-
+from sqlalchemy import func, select
 from app.models.persisted_move import Move
+
+def get_next_sequence_number(
+    session: Session,
+    game_id: UUID,
+) -> int:
+    """Return the next move-history number for a game."""
+    latest_number = session.scalar(
+        select(func.max(Move.sequence_number)).where(
+            Move.game_id == game_id,
+        )
+    )
+
+    return (latest_number or 0) + 1
 
 
 def create_move(
