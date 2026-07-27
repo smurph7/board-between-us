@@ -37,6 +37,42 @@ type SubmitMove = Callable[
 ]
 
 
+@dataclass(frozen=True)
+class ExternalStateUpdate:
+    """Result of applying a possible external game update."""
+
+    state: InteractiveGameState
+    selected_square: Square | None
+    changed: bool
+
+
+type LoadExternalState = Callable[
+    [],
+    InteractiveGameState | None,
+]
+
+
+def apply_external_state(
+    *,
+    current_state: InteractiveGameState,
+    selected_square: Square | None,
+    external_state: InteractiveGameState | None,
+) -> ExternalStateUpdate:
+    """Apply external state when one is available."""
+    if external_state is None:
+        return ExternalStateUpdate(
+            state=current_state,
+            selected_square=selected_square,
+            changed=False,
+        )
+    
+    return ExternalStateUpdate(
+        state=external_state,
+        selected_square=None,
+        changed=True,
+    )    
+
+
 def render_interactive_game(
     *,
     initial_state: InteractiveGameState,
@@ -44,6 +80,7 @@ def render_interactive_game(
     title: str | None = None,
     player_colour: Colour | None = None,
     initial_flipped: bool = False,
+    load_external_state: LoadExternalState | None = None,
 ) -> None:
     """Render shared selection, movement, flipping, and refresh behaviour."""
     state = initial_state
@@ -121,6 +158,28 @@ def render_interactive_game(
 
         selected_square = None
         game_view.refresh()
+        
+    def refresh_external_state() -> None:
+        nonlocal state, selected_square
+        
+        if load_external_state is None:
+            return
+        
+        external_state = load_external_state()
+        
+        update = apply_external_state(
+            current_state=state,
+            selected_square=selected_square,
+            external_state=external_state,
+        )
+        
+        if not update.changed:
+            return
+        
+        state = update.state
+        selected_square = update.selected_square
+        game_view.refresh()
+
 
     @ui.refreshable
     def game_view() -> None:
@@ -142,3 +201,6 @@ def render_interactive_game(
         clear_selection,
     ):
         game_view()
+        
+        if load_external_state is not None:
+            ui.timer(2.0, refresh_external_state)
