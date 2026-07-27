@@ -15,6 +15,8 @@ from app.services.move_service import (
     get_move_history,
     make_move,
 )
+from app.repositories.game_repository import get_game_version
+from app.utils.game_sync import game_version_changed
 from app.utils.board import Colour, Square
 
 
@@ -139,10 +141,28 @@ def persisted_game_page(
                 error_message=str(error),
             )
 
+    def load_external_state() -> InteractiveGameState | None:
+        """Return canonical state only when the persisted version changed."""
+        with database_session() as session:
+            database_version = get_game_version(
+                session,
+                persisted_game_id,
+            )
+
+        if database_version is None:
+            return None
+
+        if not game_version_changed(version, database_version):
+            return None
+
+        return load_current_state()
+
+
     render_interactive_game(
         title=game_name,
         initial_state=initial_state,
         submit_move=submit_persisted_move,
         player_colour=player_colour,
         initial_flipped=player_colour == "black",
+        load_external_state=load_external_state,
     )
