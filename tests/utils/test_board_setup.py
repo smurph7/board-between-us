@@ -1,5 +1,5 @@
-from app.utils.board import BoardState, Piece, Square
-from app.utils.board_setup import move_piece, place_piece, remove_piece
+from app.utils.board import BoardState, Piece, Square, create_standard_board
+from app.utils.board_setup import clear_board, move_piece, place_piece, remove_piece, reset_board
 
 
 def test_place_piece_adds_piece_without_mutating_original_board() -> None:
@@ -115,4 +115,34 @@ def test_move_piece_replaces_piece_on_destination_square() -> None:
         "e1": "white_king",
         "d4": "black_queen",
         "d5": "white_pawn",
+    }
+    
+    
+def test_clear_board_returns_empty_board_without_mutating_original() -> None:
+    original_board: BoardState = {
+        "e1": "white_king",
+        "d4": "black_queen",
+    }
+
+    updated_board = clear_board(original_board)
+
+    assert updated_board == {}
+    assert original_board == {
+        "e1": "white_king",
+        "d4": "black_queen",
+    }
+    
+    
+def test_reset_board_returns_standard_board_without_mutating_original() -> None:
+    original_board: BoardState = {
+        "e1": "white_king",
+        "d4": "black_queen",
+    }
+
+    updated_board = reset_board(original_board)
+
+    assert updated_board == create_standard_board()
+    assert original_board == {
+        "e1": "white_king",
+        "d4": "black_queen",
     }
