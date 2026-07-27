@@ -45,3 +45,12 @@ def create_game(
 def get_game(session: Session, game_id: UUID) -> Game | None:
     """Return a game by ID, or None if it does not exist."""
     return session.get(Game, game_id)
+
+
+def get_game_version(
+    session: Session,
+    game_id: UUID,
+) -> int | None:
+    """Return the current persisted version of a game."""
+    statement = select(Game.version).where(Game.id == game_id)
+    return session.scalar(statement)
