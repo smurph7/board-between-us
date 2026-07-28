@@ -121,6 +121,14 @@ def home_page() -> None:
             {"white": "White", "black": "Black"},
             value="white",
         )
+        
+        starting_position = ui.radio(
+            {
+                "standard": "Standard position",
+                "empty": "Set up existing position",
+            },
+            value="standard",
+        ).props("inline")
 
         def handle_create_game() -> None:
             """Validate the form and create a persisted game."""
@@ -157,6 +165,7 @@ def home_page() -> None:
                             Colour,
                             selected_colour,
                         ),
+                        starting_position=starting_position.value,
                         app_base_url=settings.app_base_url,
                     )
             except Exception:
