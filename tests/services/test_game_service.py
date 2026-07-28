@@ -261,3 +261,20 @@ def test_confirm_game_setup_rejects_missing_game(
             next_turn="white",
             expected_version=0,
         )
+        
+        
+def test_create_game_for_players_can_start_in_setup(
+    db_session: Session,
+) -> None:
+    created = create_game_for_players(
+        db_session,
+        creator_display_name="Sarah",
+        opponent_display_name="Daniel",
+        creator_colour="white",
+        app_base_url="https://example.com",
+        starting_position="empty",
+    )
+
+    assert created.game.board_state == {}
+    assert created.game.status == "setup"
+    assert created.game.current_turn == "white"
