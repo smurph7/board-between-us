@@ -6,13 +6,18 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.models.game import Game
 from app.models.player import Player
-from app.repositories.game_repository import create_game, get_game
+from app.repositories.game_repository import (
+    create_game, 
+    get_game,
+    get_game_for_update,
+)
 from app.repositories.player_repository import (
     create_player,
     get_player_by_token_hash,
 )
+from app.services.move_service import GameNotFoundError, StaleGameError
 from app.services.token_service import generate_access_token, hash_access_token
-from app.utils.board import Colour, create_standard_board
+from app.utils.board import BoardState, Colour, create_standard_board
 
 
 @dataclass(frozen=True)
@@ -159,3 +164,30 @@ def load_player_game(
         game=game,
         player=player,
     )
+    
+    
+def confirm_game_setup(
+    session: Session,
+    *,
+    game_id: UUID,
+    board_state: BoardState,
+    next_turn: Colour,
+    expected_version: int,
+) -> Game:
+    """Save a configured starting position and activate the game."""
+    game = get_game_for_update(session, game_id)
+    
+    if game is None: 
+        raise GameNotFoundError("Game does not exist") 
+    
+    if game.version != expected_version:
+        raise StaleGameError("The board changed on another device")
+    
+    game.board_state = dict(board_state)
+    game.current_turn = next_turn
+    game.status = "active"
+    game.version += 1
+    
+    session.flush()
+    
+    return game

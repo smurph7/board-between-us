@@ -1,13 +1,19 @@
+from uuid import uuid4
+import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.player import Player
+from app.repositories.game_repository import create_game
 from app.services.game_service import (
+    confirm_game_setup,
     create_standard_game,
     create_game_for_players,
     load_player_game,
 )
+from app.services.move_service import GameNotFoundError, StaleGameError
 from app.services.token_service import hash_access_token
+from app.utils.board import BoardState
 
 
 def test_create_standard_game_persists_game_and_players(
@@ -179,3 +185,79 @@ def test_create_game_for_black_creator_assigns_correct_links(db_session: Session
     assert result.creator_url.startswith(
         f"https://example.test/play/{result.game.id}/"
     )
+    
+
+def test_confirm_game_setup_saves_position_and_activates_game(
+    db_session: Session,
+) -> None:
+    game = create_game(
+        db_session,
+        board_state={},
+        current_turn="white",
+        status="setup",
+    )
+
+    configured_board: BoardState = {
+        "e1": "white_king",
+        "e8": "black_king",
+        "d4": "white_queen",
+    }
+
+    updated_game = confirm_game_setup(
+        db_session,
+        game_id=game.id,
+        board_state=configured_board,
+        next_turn="black",
+        expected_version=0,
+    )
+
+    assert updated_game.board_state == configured_board
+    assert updated_game.current_turn == "black"
+    assert updated_game.status == "active"
+    assert updated_game.version == 1
+    
+def test_confirm_game_setup_rejects_stale_version(
+    db_session: Session,
+) -> None:
+    original_board: BoardState = {
+        "e1": "white_king",
+    }
+
+    game = create_game(
+        db_session,
+        board_state=original_board,
+        current_turn="white",
+        status="setup",
+    )
+
+    configured_board: BoardState = {
+        "e1": "white_king",
+        "e8": "black_king",
+    }
+
+    with pytest.raises(StaleGameError):
+        confirm_game_setup(
+            db_session,
+            game_id=game.id,
+            board_state=configured_board,
+            next_turn="black",
+            expected_version=1,
+        )
+
+    assert game.board_state == original_board
+    assert game.current_turn == "white"
+    assert game.status == "setup"
+    assert game.version == 0
+    
+    
+def test_confirm_game_setup_rejects_missing_game(
+    db_session: Session,
+) -> None:
+    with pytest.raises(GameNotFoundError):
+        confirm_game_setup(
+            db_session,
+            game_id=uuid4(),
+            board_state={},
+            next_turn="white",
+            expected_version=0,
+        )
