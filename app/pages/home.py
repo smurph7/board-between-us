@@ -165,7 +165,7 @@ def home_page() -> None:
                             Colour,
                             selected_colour,
                         ),
-                        start_mode=start_mode,
+                        start_mode=start_mode.value,
                         app_base_url=settings.app_base_url,
                     )
             except Exception:

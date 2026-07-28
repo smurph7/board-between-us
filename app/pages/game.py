@@ -8,6 +8,7 @@ from app.components.interactive_game import (
     MoveSubmission,
     render_interactive_game,
 )
+from app.components.position_setup import render_position_setup
 from app.database.session import database_session
 from app.services.game_service import load_player_game
 from app.services.move_service import (
@@ -50,7 +51,8 @@ def persisted_game_page(
             player_game.player.colour,
         )
         game_name = player_game.game.name
-
+        game_status = player_game.game.status
+        
         initial_state = InteractiveGameState(
             board=player_game.game.board_state.copy(),
             current_turn=cast(
@@ -157,6 +159,13 @@ def persisted_game_page(
 
         return load_current_state()
 
+    if game_status == "setup":
+        render_position_setup(
+            initial_board=initial_state.board,
+            initial_turn=initial_state.current_turn,
+            initial_flipped=player_colour == "black",
+        )
+        return
 
     render_interactive_game(
         title=game_name,
