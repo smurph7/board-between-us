@@ -21,8 +21,6 @@ from app.services.token_service import generate_access_token, hash_access_token
 from app.utils.board import BoardState, Colour, create_standard_board
 
 
-type StartingPosition = Literal["standard", "empty"]
-
 @dataclass(frozen=True)
 class CreatedGame:
     """A newly created game and its private player credentials."""
@@ -47,18 +45,13 @@ def create_standard_game(
     name: str | None = None,
     white_display_name: str | None = None,
     black_display_name: str | None = None,
-    board_state: BoardState | None = None,
     status: str = "active",
 ) -> CreatedGame:
     """Create a standard game with White and Black player seats."""
     game = create_game(
         session,
         name=name,
-        board_state=(
-            create_standard_board()
-            if board_state is None
-            else dict(board_state)
-        ),
+        board_state=create_standard_board(),
         current_turn="white",
         status=status,
     )
@@ -91,14 +84,7 @@ def create_standard_game(
     )   
 
 
-def starting_game_state(
-    starting_position: StartingPosition,
-) -> tuple[BoardState, str]:
-    """Return the initial board and game status."""
-    if starting_position == "empty":
-        return {}, "setup"
-
-    return create_standard_board(), "active"
+type StartMode = Literal["standard", "setup"]
 
 
 def create_game_for_players(
@@ -109,10 +95,11 @@ def create_game_for_players(
     creator_colour: Colour,
     app_base_url: str,
     name: str | None = None,
-    starting_position: StartingPosition = "standard",
+    start_mode: StartMode = "standard",
 ) -> CreatedGameLinks:
     """Create a standard game and assign private links by creator colour."""
-    board_state, status = starting_game_state(starting_position)
+    board_state = create_standard_board()
+    status = "setup" if start_mode == "setup" else "active"
     
     if creator_colour == "white":
         white_display_name = creator_display_name
@@ -126,7 +113,6 @@ def create_game_for_players(
         name=name,
         white_display_name=white_display_name,
         black_display_name=black_display_name,
-        board_state=board_state,
         status=status,
     )
     

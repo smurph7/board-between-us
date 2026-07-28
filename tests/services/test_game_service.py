@@ -13,7 +13,7 @@ from app.services.game_service import (
 )
 from app.services.move_service import GameNotFoundError, StaleGameError
 from app.services.token_service import hash_access_token
-from app.utils.board import BoardState
+from app.utils.board import BoardState, create_standard_board
 
 
 def test_create_standard_game_persists_game_and_players(
@@ -272,9 +272,9 @@ def test_create_game_for_players_can_start_in_setup(
         opponent_display_name="Daniel",
         creator_colour="white",
         app_base_url="https://example.com",
-        starting_position="empty",
+        start_mode="setup",
     )
 
-    assert created.game.board_state == {}
+    assert created.game.board_state == create_standard_board()
     assert created.game.status == "setup"
     assert created.game.current_turn == "white"

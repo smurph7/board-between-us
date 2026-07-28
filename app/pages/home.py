@@ -122,10 +122,10 @@ def home_page() -> None:
             value="white",
         )
         
-        starting_position = ui.radio(
+        start_mode = ui.radio(
             {
                 "standard": "Standard position",
-                "empty": "Set up existing position",
+                "setup": "Set up existing position",
             },
             value="standard",
         ).props("inline")
@@ -165,7 +165,7 @@ def home_page() -> None:
                             Colour,
                             selected_colour,
                         ),
-                        starting_position=starting_position.value,
+                        start_mode=start_mode,
                         app_base_url=settings.app_base_url,
                     )
             except Exception:
