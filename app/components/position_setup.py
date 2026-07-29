@@ -1,12 +1,32 @@
+from functools import partial
 from nicegui import ui
 
-from app.components.chess_board import render_chess_board
-from app.utils.board import BoardState, Colour, Square
+from app.components.chess_board import PIECE_SYMBOLS, render_chess_board
+from app.utils.board import BoardState, Colour, Piece, Square
 from app.utils.board_setup import (
     clear_board,
     move_piece,
+    place_piece,
     remove_piece,
     reset_board,
+)
+
+WHITE_TRAY_PIECES: tuple[Piece, ...] = (
+    "white_king",
+    "white_queen",
+    "white_rook",
+    "white_bishop",
+    "white_knight",
+    "white_pawn",
+)
+
+BLACK_TRAY_PIECES: tuple[Piece, ...] = (
+    "black_king",
+    "black_queen",
+    "black_rook",
+    "black_bishop",
+    "black_knight",
+    "black_pawn",
 )
 
 
@@ -19,6 +39,7 @@ def render_position_setup(
     """Render an editable starting-position interface."""
     board = initial_board.copy()
     selected_square: Square | None = None
+    selected_piece: Piece | None = None
     flipped = initial_flipped
 
     ui.label("Set up starting position")
@@ -32,10 +53,33 @@ def render_position_setup(
         board = remove_piece(board, selected_square)
         selected_square = None
         render_editable_board.refresh()
+        
+
+    def select_tray_piece(piece: Piece) -> None:
+        nonlocal selected_piece, selected_square
+
+        selected_piece = None if selected_piece == piece else piece
+        selected_square = None
+
+        render_piece_tray.refresh()
+        render_editable_board.refresh()
 
     
     def handle_square_click(square: Square) -> None:
-        nonlocal board, selected_square
+        nonlocal board, selected_square, selected_piece
+        
+        if selected_piece is not None:
+            board = place_piece(
+                board,
+                square,
+                selected_piece,
+            )
+            selected_piece = None
+            selected_square = None
+            
+            render_piece_tray.refresh()
+            render_editable_board.refresh()
+            return
 
         if selected_square is None:
             if square in board:
@@ -83,6 +127,37 @@ def render_position_setup(
         ui.button("Reset to standard", on_click=reset_setup_board)
     
     @ui.refreshable
+    def render_piece_tray() -> None:
+        ui.label("White pieces")
+
+        with ui.row().classes("gap-2"):
+            for piece in WHITE_TRAY_PIECES:
+                button = ui.button(
+                    PIECE_SYMBOLS[piece],
+                    on_click=partial(select_tray_piece, piece),
+                )
+
+                if piece == selected_piece:
+                    button.props("unelevated")
+                else:
+                    button.props("outline")
+
+        ui.label("Black pieces")
+
+        with ui.row().classes("gap-2"):
+            for piece in BLACK_TRAY_PIECES:
+                button = ui.button(
+                    PIECE_SYMBOLS[piece],
+                    on_click=partial(select_tray_piece, piece),
+                )
+
+                if piece == selected_piece:
+                    button.props("unelevated")
+                else:
+                    button.props("outline")
+    
+    
+    @ui.refreshable
     def render_editable_board() -> None:
         render_chess_board(
             board=board,
@@ -97,4 +172,5 @@ def render_position_setup(
                 on_click=remove_selected_piece,
             )
         
+    render_piece_tray()
     render_editable_board()
