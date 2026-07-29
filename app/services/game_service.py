@@ -8,7 +8,8 @@ from app.config import get_settings
 from app.models.game import Game
 from app.models.player import Player
 from app.repositories.game_repository import (
-    create_game, 
+    create_game,
+    delete_game, 
     get_game,
     get_game_for_update,
 )
@@ -20,7 +21,9 @@ from app.services.move_service import GameNotFoundError, StaleGameError
 from app.services.token_service import generate_access_token, hash_access_token
 from app.utils.board import BoardState, Colour, create_standard_board
 
-
+class GameNotInSetupError(Exception):
+    """Raised when a setup-only operation targets an active game."""
+    
 @dataclass(frozen=True)
 class CreatedGame:
     """A newly created game and its private player credentials."""
@@ -201,3 +204,26 @@ def confirm_game_setup(
     session.flush()
     
     return game
+
+
+def cancel_game_setup(
+    session: Session,
+    *,
+    game_id: UUID,
+    expected_version: int,
+) -> None:
+    """Delete a game whose initial setup has not been confirmed."""
+    game = get_game_for_update(session, game_id)
+
+    if game is None:
+        raise GameNotFoundError("Game does not exist")
+
+    if game.version != expected_version:
+        raise StaleGameError("The board changed on another device")
+
+    if game.status != "setup":
+        raise GameNotInSetupError(
+            "This game setup has already finished"
+        )
+
+    delete_game(session, game)

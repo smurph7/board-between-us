@@ -160,11 +160,8 @@ def persisted_game_page(
         return load_current_state()
 
     if game_status == "setup":
-        render_position_setup(
-            initial_board=initial_state.board,
-            initial_turn=initial_state.current_turn,
-            initial_flipped=player_colour == "black",
-            confirm_setup=lambda board, next_turn: None,
+        ui.label(
+            "This game is still being set up by its creator."
         )
         return
 

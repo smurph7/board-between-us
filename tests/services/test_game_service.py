@@ -3,10 +3,13 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.models.game import Game
 from app.models.player import Player
 from app.repositories.game_repository import create_game
 from app.services.game_service import (
+    GameNotInSetupError,
     confirm_game_setup,
+    cancel_game_setup,
     create_standard_game,
     create_game_for_players,
     load_player_game,
@@ -278,3 +281,56 @@ def test_create_game_for_players_can_start_in_setup(
     assert created.game.board_state == create_standard_board()
     assert created.game.status == "setup"
     assert created.game.current_turn == "white"
+    
+
+
+def test_cancel_game_setup_deletes_draft_game_and_players(
+    db_session: Session,
+) -> None:
+    created = create_standard_game(
+        db_session,
+        status="setup",
+    )
+
+    game_id = created.game.id
+    white_player_id = created.white_player.id
+    black_player_id = created.black_player.id
+
+    cancel_game_setup(
+        db_session,
+        game_id=game_id,
+        expected_version=0,
+    )
+
+    assert db_session.get(Game, game_id) is None
+
+    remaining_player_ids = db_session.scalars(
+        select(Player.id).where(
+            Player.id.in_([
+                white_player_id,
+                black_player_id,
+            ])
+        )
+    ).all()
+
+    assert remaining_player_ids == []
+    
+    
+def test_cancel_game_setup_rejects_active_game(
+    db_session: Session,
+) -> None:
+    created = create_standard_game(
+        db_session,
+        status="active",
+    )
+
+    game_id = created.game.id
+
+    with pytest.raises(GameNotInSetupError):
+        cancel_game_setup(
+            db_session,
+            game_id=game_id,
+            expected_version=0,
+        )
+
+    assert db_session.get(Game, game_id) is not None

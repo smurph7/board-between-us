@@ -33,7 +33,7 @@ BLACK_TRAY_PIECES: tuple[Piece, ...] = (
 
 
 type ConfirmSetup = Callable[[BoardState, Colour], None]
-
+type CancelSetup = Callable[[], None]
 
 def render_position_setup(
     *,
@@ -41,6 +41,7 @@ def render_position_setup(
     initial_turn: Colour,
     initial_flipped: bool,
     confirm_setup: ConfirmSetup,
+    cancel_setup: CancelSetup,
 ) -> None:
     """Render an editable starting-position interface."""
     board = initial_board.copy()
@@ -200,10 +201,16 @@ def render_position_setup(
                 cast(Colour, turn_selector.value),
             )
             
-        ui.button(
-            "Start online game",
-            on_click=confirm_position,
-        )
+        with ui.row():
+            ui.button(
+                "Start online game",
+                on_click=confirm_position,
+            )
+
+            ui.button(
+                "Cancel setup",
+                on_click=cancel_setup,
+            ).props("outline")
     
     render_piece_tray()
     render_editable_board()

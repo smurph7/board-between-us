@@ -8,6 +8,8 @@ from app.database.session import database_session
 from app.components.position_setup import render_position_setup
 from app.services.game_service import (
     CreatedGameLinks,
+    GameNotInSetupError,
+    cancel_game_setup,
     confirm_game_setup,
     create_game_for_players,
 )
@@ -132,13 +134,44 @@ def home_page() -> None:
                 )
                 return
 
-            result_area.clear()
-            render_created_links(created_links)
-
             ui.notify(
                 "Starting position saved",
                 type="positive",
             )
+            
+            result_area.clear()
+            render_created_links(created_links)
+
+        def handle_cancel_setup() -> None:
+            try:
+                with database_session() as session:
+                    cancel_game_setup(
+                        session,
+                        game_id=created_links.game.id,
+                        expected_version=expected_version,
+                    )
+            except (
+                GameNotFoundError,
+                StaleGameError,
+                GameNotInSetupError,
+            ) as error:
+                ui.notify(str(error), type="negative")
+                return
+            except Exception:
+                logger.exception("Position setup cancellation failed")
+                ui.notify(
+                    "The game setup could not be cancelled.",
+                    type="negative",
+                )
+                return
+
+            ui.notify("Game setup cancelled")
+            
+            result_area.clear()
+            result_area.set_visibility(False)
+            form_area.set_visibility(True)
+            create_button.enable()
+
 
         with result_area:
             render_position_setup(
@@ -146,6 +179,7 @@ def home_page() -> None:
                 initial_turn=initial_turn,
                 initial_flipped=created_links.creator_colour == "black",
                 confirm_setup=handle_confirm_setup,
+                cancel_setup=handle_cancel_setup,
             )
             
 

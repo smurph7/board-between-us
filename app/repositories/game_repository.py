@@ -54,3 +54,12 @@ def get_game_version(
     """Return the current persisted version of a game."""
     statement = select(Game.version).where(Game.id == game_id)
     return session.scalar(statement)
+
+
+def delete_game(
+    session: Session,
+    game: Game,
+) -> None:
+    """Delete a game in the current transaction."""
+    session.delete(game)
+    session.flush()
