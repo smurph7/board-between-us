@@ -1,5 +1,7 @@
 from functools import partial
 from nicegui import ui
+from collections.abc import Callable
+from typing import cast
 
 from app.components.chess_board import PIECE_SYMBOLS, render_chess_board
 from app.utils.board import BoardState, Colour, Piece, Square
@@ -30,17 +32,22 @@ BLACK_TRAY_PIECES: tuple[Piece, ...] = (
 )
 
 
+type ConfirmSetup = Callable[[BoardState, Colour], None]
+
+
 def render_position_setup(
     *,
     initial_board: BoardState,
     initial_turn: Colour,
     initial_flipped: bool,
+    confirm_setup: ConfirmSetup,
 ) -> None:
     """Render an editable starting-position interface."""
     board = initial_board.copy()
     selected_square: Square | None = None
     selected_piece: Piece | None = None
     flipped = initial_flipped
+    next_turn: Colour = initial_turn
 
     ui.label("Set up starting position")
     
@@ -121,7 +128,12 @@ def render_position_setup(
         selected_square = None
         render_editable_board.refresh()
         
-
+        
+    def select_next_turn(colour: Colour) -> None:
+        nonlocal next_turn
+        next_turn = colour
+    
+    
     with ui.row():
         ui.button("Clear board", on_click=clear_setup_board)
         ui.button("Reset to standard", on_click=reset_setup_board)
@@ -172,5 +184,26 @@ def render_position_setup(
                 on_click=remove_selected_piece,
             )
         
+        ui.label("Who moves next?")
+
+        turn_selector = ui.radio(
+            {
+                "white": "White to move",
+                "black": "Black to move",
+            },
+            value=next_turn,
+        ).props("inline")
+        
+        def confirm_position() -> None:
+            confirm_setup(
+                board.copy(),
+                cast(Colour, turn_selector.value),
+            )
+            
+        ui.button(
+            "Start online game",
+            on_click=confirm_position,
+        )
+    
     render_piece_tray()
     render_editable_board()

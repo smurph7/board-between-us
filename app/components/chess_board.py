@@ -35,7 +35,7 @@ def render_chess_board(
         js_handler="(event) => event.stopPropagation()",
     ):
         # Top file labels
-        with ui.row().classes("gap-0"):
+        with ui.row().classes("gap-0 flex-nowrap"):
             ui.label("").classes("w-6")
 
             for file_letter in files:
@@ -47,7 +47,7 @@ def render_chess_board(
 
         # Board rows, with rank labels on both sides
         for rank in ranks:
-            with ui.row().classes("gap-0 items-center"):
+            with ui.row().classes("gap-0 items-center flex-nowrap"):
                 ui.label(str(rank)).classes(
                     "w-6 h-12 flex items-center justify-center"
                 )
@@ -83,7 +83,7 @@ def render_chess_board(
                 )
 
         # Bottom file labels
-        with ui.row().classes("gap-0"):
+        with ui.row().classes("gap-0 flex-nowrap"):
             ui.label("").classes("w-6")
 
             for file_letter in files:

@@ -164,6 +164,7 @@ def persisted_game_page(
             initial_board=initial_state.board,
             initial_turn=initial_state.current_turn,
             initial_flipped=player_colour == "black",
+            confirm_setup=lambda board, next_turn: None,
         )
         return
 
