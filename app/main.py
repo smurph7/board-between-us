@@ -1,3 +1,4 @@
+import os
 from nicegui import ui
 
 from app.pages import demo, game, home  # noqa: F401
@@ -10,7 +11,11 @@ configure_theme()
 
 def main() -> None:
     """Run the Board Between Us web application."""
-    ui.run()
+    ui.run(
+        host="0.0.0.0",
+        port=int(os.getenv("PORT", "8080")),
+        reload=False,
+    )
 
 
 if __name__ in {"__main__", "__mp_main__"}:
