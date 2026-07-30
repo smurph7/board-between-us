@@ -30,7 +30,9 @@ def home_page() -> None:
     """Render the game creation page."""
     settings = get_settings()
 
-    with ui.column().classes("w-full max-w-md mx-auto gap-6 p-4"):
+    with ui.column().classes(
+        "w-full max-w-md mx-auto gap-6 p-4 sm:p-6"
+    ):
         ui.label("Board Between Us").classes("text-2xl font-semibold")
         ui.label("A private shared chessboard for slow games.")
 
@@ -54,7 +56,7 @@ def home_page() -> None:
             ).classes("text-sm")
 
             with ui.row().classes(
-                "w-full items-end gap-2 flex-nowrap"
+                "w-full items-end gap-2 flex-wrap sm:flex-nowrap"
             ):
                 ui.input(
                     label="Your private link",
@@ -69,7 +71,9 @@ def home_page() -> None:
                         created_links.creator_url,
                         "Your link copied",
                     ),
-                ).props(SECONDARY_BUTTON_PROPS)
+                ).props(SECONDARY_BUTTON_PROPS).classes(
+                    "w-full sm:w-auto"
+                )
 
             ui.link(
                 "Open my board",
@@ -84,7 +88,7 @@ def home_page() -> None:
             ).classes("text-sm")
 
             with ui.row().classes(
-                "w-full items-end gap-2 flex-nowrap"
+                "w-full items-end gap-2 flex-wrap sm:flex-nowrap"
             ):
                 ui.input(
                     label="Opponent invitation link",
@@ -99,8 +103,10 @@ def home_page() -> None:
                         created_links.opponent_url,
                         "Invitation link copied",
                     ),
-                ).props(SECONDARY_BUTTON_PROPS)
-            
+                ).props(SECONDARY_BUTTON_PROPS).classes(
+                    "w-full sm:w-auto"
+                )
+
             ui.label(
                 "Copy these links now. They cannot be shown again after you leave this page."
             ).classes("text-sm font-medium pt-4")
@@ -170,12 +176,11 @@ def home_page() -> None:
                 return
 
             ui.notify("Game setup cancelled")
-            
+
             result_area.clear()
             result_area.set_visibility(False)
             form_area.set_visibility(True)
             create_button.enable()
-
 
         with result_area:
             render_position_setup(
@@ -185,7 +190,7 @@ def home_page() -> None:
                 confirm_setup=handle_confirm_setup,
                 cancel_setup=handle_cancel_setup,
             )
-            
+
 
     with form_area:
         creator_name = (
@@ -215,7 +220,7 @@ def home_page() -> None:
             {"white": "White", "black": "Black"},
             value="white",
         )
-        
+
         start_mode = ui.radio(
             {
                 "standard": "Standard position",

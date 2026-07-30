@@ -13,6 +13,9 @@ APP_CSS = """
     --app-text: #26332D;
     --app-muted: #68756F;
     --app-border: #D8D2C5;
+    --board-light: #FEF3C7;
+    --board-dark: #B45309;
+    --board-selected: #365C4A;
 }
 
 body {
@@ -36,11 +39,41 @@ body {
     width: 100%;
     max-width: 36rem;
     margin-inline: auto;
+    align-items: center;
+}
+
+.board-coordinate {
+    color: var(--app-muted);
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.board-square {
+    cursor: pointer;
+    line-height: 1;
+    user-select: none;
+}
+
+.board-square-light {
+    background: var(--board-light);
+}
+
+.board-square-dark {
+    background: var(--board-dark);
+}
+
+.board-square-selected {
+    box-shadow: inset 0 0 0 4px var(--board-selected);
 }
 
 .piece-symbol,
 .piece-button .q-btn__content {
     color: #111111;
+}
+
+.piece-button .q-btn__content {
+    font-size: 1.5rem;
+    line-height: 1;
 }
 """
 

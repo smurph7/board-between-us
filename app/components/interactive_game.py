@@ -482,7 +482,9 @@ def render_interactive_game(
             )
             return
         
-        ui.label(title or "Board Between Us").classes("text-h5")
+        ui.label(title or "Board Between Us").classes(
+            "text-h5 font-semibold"
+        )
 
         castle_sides = available_castle_sides()
 
@@ -548,7 +550,9 @@ def render_interactive_game(
         )
     
     
-    with ui.column().classes("w-full min-h-screen").on(
+    with ui.column().classes(
+        "w-full min-h-screen gap-4 p-4 sm:p-6"
+    ).on(
         "click",
         clear_selection,
     ):

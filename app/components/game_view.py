@@ -23,10 +23,17 @@ def render_game_view(
     undo_label: str = "Undo",
 ) -> None:
     """Render the shared game board, controls, and move history."""
-    if player_colour is not None:
-        ui.label(f"Playing as {player_colour.title()}")
+    with ui.row().classes(
+        "w-full items-baseline justify-between gap-3 flex-wrap"
+    ):
+        if player_colour is not None:
+            ui.label(f"Playing as {player_colour.title()}").classes(
+                "text-sm text-grey-7"
+            )
 
-    ui.label(f"{current_turn.title()} to move")
+        ui.label(f"{current_turn.title()} to move").classes(
+            "font-medium"
+        )
 
     with ui.column().classes("board-shell"):
         render_chess_board(
@@ -36,9 +43,10 @@ def render_game_view(
             flipped=flipped,
         )
 
-    ui.button("Flip board", on_click=on_flip).props(
-        SECONDARY_BUTTON_PROPS
-    )
+    with ui.row().classes("w-full justify-center"):
+        ui.button("Flip board", on_click=on_flip).props(
+            SECONDARY_BUTTON_PROPS
+        )
 
     render_move_history(
         move_history,

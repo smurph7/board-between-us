@@ -1,7 +1,8 @@
-from functools import partial
-from nicegui import ui
 from collections.abc import Callable
+from functools import partial
 from typing import cast
+
+from nicegui import ui
 
 from app.components.chess_board import PIECE_SYMBOLS, render_chess_board
 from app.theme import (
@@ -40,6 +41,7 @@ BLACK_TRAY_PIECES: tuple[Piece, ...] = (
 type ConfirmSetup = Callable[[BoardState, Colour], None]
 type CancelSetup = Callable[[], None]
 
+
 def render_position_setup(
     *,
     initial_board: BoardState,
@@ -63,7 +65,7 @@ def render_position_setup(
     )
 
     ui.label(title).classes("text-h5")
-    
+
     def remove_selected_piece() -> None:
         nonlocal board, selected_square
 
@@ -73,7 +75,6 @@ def render_position_setup(
         board = remove_piece(board, selected_square)
         selected_square = None
         render_editable_board.refresh()
-        
 
     def select_tray_piece(piece: Piece) -> None:
         nonlocal selected_piece, selected_square
@@ -84,10 +85,9 @@ def render_position_setup(
         render_piece_tray.refresh()
         render_editable_board.refresh()
 
-    
     def handle_square_click(square: Square) -> None:
         nonlocal board, selected_square, selected_piece
-        
+
         if selected_piece is not None:
             board = place_piece(
                 board,
@@ -96,7 +96,7 @@ def render_position_setup(
             )
             selected_piece = None
             selected_square = None
-            
+
             render_piece_tray.refresh()
             render_editable_board.refresh()
             return
@@ -124,8 +124,7 @@ def render_position_setup(
         )
         selected_square = None
         render_editable_board.refresh()
-        
-        
+
     def clear_setup_board() -> None:
         nonlocal board, selected_square
 
@@ -133,16 +132,14 @@ def render_position_setup(
         selected_square = None
         render_editable_board.refresh()
 
-
     def reset_setup_board() -> None:
         nonlocal board, selected_square
 
         board = reset_board(board)
         selected_square = None
         render_editable_board.refresh()
-    
-    
-    with ui.row():
+
+    with ui.row().classes("w-full gap-2 flex-wrap"):
         ui.button(
             "Clear board",
             on_click=clear_setup_board,
@@ -151,12 +148,12 @@ def render_position_setup(
             "Reset to standard",
             on_click=reset_setup_board,
         ).props(SECONDARY_BUTTON_PROPS)
-    
+
     @ui.refreshable
     def render_piece_tray() -> None:
         ui.label("White pieces")
 
-        with ui.row().classes("gap-2"):
+        with ui.row().classes("gap-2 flex-wrap"):
             for piece in WHITE_TRAY_PIECES:
                 button = ui.button(
                     PIECE_SYMBOLS[piece],
@@ -171,7 +168,7 @@ def render_position_setup(
 
         ui.label("Black pieces")
 
-        with ui.row().classes("gap-2"):
+        with ui.row().classes("gap-2 flex-wrap"):
             for piece in BLACK_TRAY_PIECES:
                 button = ui.button(
                     PIECE_SYMBOLS[piece],
@@ -183,8 +180,7 @@ def render_position_setup(
                 else:
                     button.props("outline color=dark")
                 button.classes("piece-button")
-    
-    
+
     @ui.refreshable
     def render_editable_board() -> None:
         with ui.column().classes("board-shell"):
@@ -194,13 +190,13 @@ def render_position_setup(
                 on_square_click=handle_square_click,
                 flipped=flipped,
             )
-        
+
         if selected_square is not None:
             ui.button(
                 "Remove selected piece",
                 on_click=remove_selected_piece,
             ).props(DANGER_BUTTON_PROPS)
-        
+
         ui.label("Who moves next?")
 
         turn_selector = ui.radio(
@@ -210,14 +206,14 @@ def render_position_setup(
             },
             value=initial_turn,
         ).props("inline")
-        
+
         def confirm_position() -> None:
             confirm_setup(
                 board.copy(),
                 cast(Colour, turn_selector.value),
             )
-            
-        with ui.row():
+
+        with ui.row().classes("w-full gap-2 flex-wrap"):
             ui.button(
                 confirm_label,
                 on_click=confirm_position,
@@ -227,6 +223,6 @@ def render_position_setup(
                 cancel_label,
                 on_click=cancel_setup,
             ).props(cancel_button_props)
-    
+
     render_piece_tray()
     render_editable_board()
