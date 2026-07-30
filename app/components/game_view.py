@@ -5,6 +5,7 @@ from nicegui import ui
 from app.components.chess_board import render_chess_board
 from app.components.move_history import render_move_history
 from app.models.move import MoveRecord
+from app.theme import SECONDARY_BUTTON_PROPS
 from app.utils.board import BoardState, Colour, Square
 
 
@@ -27,14 +28,17 @@ def render_game_view(
 
     ui.label(f"{current_turn.title()} to move")
 
-    render_chess_board(
-        board=board,
-        selected_square=selected_square,
-        on_square_click=on_square_click,
-        flipped=flipped,
-    )
+    with ui.column().classes("board-shell"):
+        render_chess_board(
+            board=board,
+            selected_square=selected_square,
+            on_square_click=on_square_click,
+            flipped=flipped,
+        )
 
-    ui.button("Flip board", on_click=on_flip)
+    ui.button("Flip board", on_click=on_flip).props(
+        SECONDARY_BUTTON_PROPS
+    )
 
     render_move_history(
         move_history,

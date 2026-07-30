@@ -1,4 +1,5 @@
 import logging
+from functools import partial
 from typing import cast
 
 from nicegui import ui
@@ -17,6 +18,7 @@ from app.services.move_service import (
     GameNotFoundError,
     StaleGameError,
 )
+from app.theme import PRIMARY_BUTTON_PROPS, SECONDARY_BUTTON_PROPS
 from app.utils.board import BoardState, Colour
 
 
@@ -60,13 +62,14 @@ def home_page() -> None:
                 ).props("readonly").classes("flex-1 min-w-0")
 
                 ui.button(
-                    "Copy",
+                    "Copy link",
                     icon="content_copy",
-                    on_click=lambda: copy_link(
+                    on_click=partial(
+                        copy_link,
                         created_links.creator_url,
                         "Your link copied",
                     ),
-                )
+                ).props(SECONDARY_BUTTON_PROPS)
 
             ui.link(
                 "Open my board",
@@ -89,13 +92,14 @@ def home_page() -> None:
                 ).props("readonly").classes("flex-1 min-w-0")
 
                 ui.button(
-                    "Copy",
+                    "Copy opponent link",
                     icon="content_copy",
-                    on_click=lambda: copy_link(
+                    on_click=partial(
+                        copy_link,
                         created_links.opponent_url,
                         "Invitation link copied",
                     ),
-                )
+                ).props(SECONDARY_BUTTON_PROPS)
             
             ui.label(
                 "Copy these links now. They cannot be shown again after you leave this page."
@@ -302,4 +306,4 @@ def home_page() -> None:
         create_button = ui.button(
             "Create game",
             on_click=handle_create_game,
-        )
+        ).props(PRIMARY_BUTTON_PROPS)

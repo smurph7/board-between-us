@@ -3,6 +3,7 @@ from collections.abc import Callable
 from nicegui import ui
 
 from app.models.move import MoveRecord
+from app.theme import SECONDARY_BUTTON_PROPS
 from app.utils.formatting import format_move
 
 
@@ -25,7 +26,7 @@ def render_move_history(
             ui.button(
                 undo_label,
                 on_click=on_undo,
-            ).props("outline dense")
+            ).props(f"{SECONDARY_BUTTON_PROPS} dense")
 
     if not moves:
         ui.label("No moves yet")

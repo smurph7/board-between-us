@@ -4,6 +4,11 @@ from collections.abc import Callable
 from typing import cast
 
 from app.components.chess_board import PIECE_SYMBOLS, render_chess_board
+from app.theme import (
+    DANGER_BUTTON_PROPS,
+    PRIMARY_BUTTON_PROPS,
+    SECONDARY_BUTTON_PROPS,
+)
 from app.utils.board import BoardState, Colour, Piece, Square
 from app.utils.board_setup import (
     clear_board,
@@ -51,6 +56,11 @@ def render_position_setup(
     selected_square: Square | None = None
     selected_piece: Piece | None = None
     flipped = initial_flipped
+    cancel_button_props = (
+        DANGER_BUTTON_PROPS
+        if cancel_label == "Cancel setup"
+        else SECONDARY_BUTTON_PROPS
+    )
 
     ui.label(title).classes("text-h5")
     
@@ -133,8 +143,14 @@ def render_position_setup(
     
     
     with ui.row():
-        ui.button("Clear board", on_click=clear_setup_board)
-        ui.button("Reset to standard", on_click=reset_setup_board)
+        ui.button(
+            "Clear board",
+            on_click=clear_setup_board,
+        ).props(DANGER_BUTTON_PROPS)
+        ui.button(
+            "Reset to standard",
+            on_click=reset_setup_board,
+        ).props(SECONDARY_BUTTON_PROPS)
     
     @ui.refreshable
     def render_piece_tray() -> None:
@@ -148,9 +164,10 @@ def render_position_setup(
                 )
 
                 if piece == selected_piece:
-                    button.props("unelevated")
+                    button.props("unelevated color=accent")
                 else:
-                    button.props("outline")
+                    button.props("outline color=dark")
+                button.classes("piece-button")
 
         ui.label("Black pieces")
 
@@ -162,25 +179,27 @@ def render_position_setup(
                 )
 
                 if piece == selected_piece:
-                    button.props("unelevated")
+                    button.props("unelevated color=accent")
                 else:
-                    button.props("outline")
+                    button.props("outline color=dark")
+                button.classes("piece-button")
     
     
     @ui.refreshable
     def render_editable_board() -> None:
-        render_chess_board(
-            board=board,
-            selected_square=selected_square,
-            on_square_click=handle_square_click,
-            flipped=flipped,
-        )
+        with ui.column().classes("board-shell"):
+            render_chess_board(
+                board=board,
+                selected_square=selected_square,
+                on_square_click=handle_square_click,
+                flipped=flipped,
+            )
         
         if selected_square is not None:
             ui.button(
                 "Remove selected piece",
                 on_click=remove_selected_piece,
-            )
+            ).props(DANGER_BUTTON_PROPS)
         
         ui.label("Who moves next?")
 
@@ -202,12 +221,12 @@ def render_position_setup(
             ui.button(
                 confirm_label,
                 on_click=confirm_position,
-            )
+            ).props(PRIMARY_BUTTON_PROPS)
 
             ui.button(
                 cancel_label,
                 on_click=cancel_setup,
-            ).props("outline")
+            ).props(cancel_button_props)
     
     render_piece_tray()
     render_editable_board()

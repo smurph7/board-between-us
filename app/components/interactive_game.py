@@ -6,6 +6,7 @@ from nicegui import ui
 from app.components.game_view import render_game_view
 from app.components.position_setup import render_position_setup
 from app.models.move import MoveRecord
+from app.theme import PRIMARY_BUTTON_PROPS, SECONDARY_BUTTON_PROPS
 from app.utils.board import (
     BoardState,
     CastleSide,
@@ -349,7 +350,7 @@ def render_interactive_game(
                 ui.button(
                     "Confirm castle",
                     on_click=confirm_castle,
-                )
+                ).props(PRIMARY_BUTTON_PROPS)
 
         dialog.open()
         
@@ -461,7 +462,7 @@ def render_interactive_game(
                 ui.button(
                     "Undo",
                     on_click=confirm_undo,
-                )
+                ).props(PRIMARY_BUTTON_PROPS)
 
         dialog.open()
     
@@ -506,7 +507,7 @@ def render_interactive_game(
                             show_castle_confirmation,
                             side,
                         ),
-                    )
+                    ).props(PRIMARY_BUTTON_PROPS)
 
             castle_actions.on(
                 "click",
@@ -517,7 +518,7 @@ def render_interactive_game(
             ui.button(
                 "Correct position",
                 on_click=enter_correction_mode,
-            ).props("outline")
+            ).props(SECONDARY_BUTTON_PROPS)
         
             
         undo_target = latest_undoable_record(

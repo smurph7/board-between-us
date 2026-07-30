@@ -4,6 +4,22 @@ from functools import partial
 
 from app.utils.board import BoardState, Square
 
+BOARD_SQUARE_CLASSES = (
+    "w-[clamp(2.1rem,10vw,3.75rem)] "
+    "aspect-square "
+    "flex items-center justify-center "
+    "text-[clamp(1.5rem,7vw,2.75rem)] "
+    "piece-symbol"
+)
+FILE_LABEL_CLASSES = (
+    "w-[clamp(2.1rem,10vw,3.75rem)] "
+    "h-6 flex items-center justify-center"
+)
+RANK_LABEL_CLASSES = (
+    "w-6 h-[clamp(2.1rem,10vw,3.75rem)] "
+    "flex items-center justify-center"
+)
+
 PIECE_SYMBOLS = {
         "white_king": "♔",
         "white_queen": "♕",
@@ -39,18 +55,14 @@ def render_chess_board(
             ui.label("").classes("w-6")
 
             for file_letter in files:
-                ui.label(file_letter).classes(
-                    "w-12 h-6 flex items-center justify-center"
-                )
+                ui.label(file_letter).classes(FILE_LABEL_CLASSES)
 
             ui.label("").classes("w-6")
 
         # Board rows, with rank labels on both sides
         for rank in ranks:
             with ui.row().classes("gap-0 items-center flex-nowrap"):
-                ui.label(str(rank)).classes(
-                    "w-6 h-12 flex items-center justify-center"
-                )
+                ui.label(str(rank)).classes(RANK_LABEL_CLASSES)
 
                 for file_letter in files:
                     file_index = "abcdefgh".index(file_letter)
@@ -66,29 +78,23 @@ def render_chess_board(
                     )
 
                     selection_class = (
-                        "ring-4 ring-blue-500 ring-inset"
+                        "ring-4 ring-[#365C4A] ring-inset"
                         if square == selected_square
                         else ""
                     )
 
                     ui.label(symbol).classes(
                         f"{background} {selection_class} "
-                        "w-12 h-12 "
-                        "flex items-center justify-center "
-                        "text-3xl"
+                        f"{BOARD_SQUARE_CLASSES}"
                     ).on("click", partial(on_square_click, square))
 
-                ui.label(str(rank)).classes(
-                    "w-6 h-12 flex items-center justify-center"
-                )
+                ui.label(str(rank)).classes(RANK_LABEL_CLASSES)
 
         # Bottom file labels
         with ui.row().classes("gap-0 flex-nowrap"):
             ui.label("").classes("w-6")
 
             for file_letter in files:
-                ui.label(file_letter).classes(
-                    "w-12 h-6 flex items-center justify-center"
-                )
+                ui.label(file_letter).classes(FILE_LABEL_CLASSES)
 
             ui.label("").classes("w-6")
