@@ -377,103 +377,96 @@ def get_move_history(
             player_colours[move.player_id] = actor_colour
 
         move_type = cast(MoveType, move.move_type)
-        
-        if move_type == "undo":
-            undo_details = move.changes[0] if move.changes else {}
-
-            records.append(
-                MoveRecord(
-                    number=move.sequence_number,
-                    colour=actor_colour,
-                    move_type=move_type,
-                    piece=None,
-                    from_square=None,
-                    to_square=None,
-                    captured_piece=None,
-                    previous_turn=cast(
-                        Colour,
-                        move.previous_turn,
-                    ),
-                    resulting_turn=cast(
-                        Colour,
-                        move.resulting_turn,
-                    ),
-                    undo_target_number=cast(
-                        int | None,
-                        undo_details.get("undone_sequence_number"),
-                    ),
-                    undo_target_type=cast(
-                        str | None,
-                        undo_details.get("undone_move_type"),
-                    ),
-                    is_undone=move.is_undone,
-                )
-            )
-            continue
-
-        if move_type == "correction":
-            records.append(
-                MoveRecord(
-                    number=move.sequence_number,
-                    colour=actor_colour,
-                    move_type=move_type,
-                    piece=None,
-                    from_square=None,
-                    to_square=None,
-                    captured_piece=None,
-                    correction_changes=describe_board_changes(
-                        move.board_state_before,
-                        move.board_state_after,
-                    ),
-                    previous_turn=cast(
-                        Colour,
-                        move.previous_turn,
-                    ),
-                    resulting_turn=cast(
-                        Colour,
-                        move.resulting_turn,
-                    ),
-                    is_undone=move.is_undone,
-                )
-            )
-            continue
 
         if (
+            move_type not in {"undo", "correction"}
+            and (
             move.piece is None
             or move.from_square is None
             or move.to_square is None
+            )
         ):
             continue
 
-        castle_side: CastleSide | None = None
-
-        if move_type == "castle":
-            castle_side = (
-                "kingside"
-                if move.to_square in {"g1", "g8"}
-                else "queenside"
-            )
-
         records.append(
-            MoveRecord(
-                number=move.sequence_number,
+            persisted_move_to_record(
+                move,
                 colour=actor_colour,
-                move_type=move_type,
-                piece=move.piece,
-                from_square=move.from_square,
-                to_square=move.to_square,
-                captured_piece=move.captured_piece,
-                castle_side=castle_side,
-                previous_turn=cast(
-                    Colour,
-                    move.previous_turn,
-                ),
-                resulting_turn=cast(
-                    Colour,
-                    move.resulting_turn,
-                ),
-                is_undone=move.is_undone,
             )
         )
 
     return records
+
+
+def persisted_move_to_record(
+    move: Move,
+    *,
+    colour: Colour,
+) -> MoveRecord:
+    """Return the UI move-history shape for one persisted event."""
+    move_type = cast(MoveType, move.move_type)
+
+    if move_type == "undo":
+        undo_details = move.changes[0] if move.changes else {}
+
+        return MoveRecord(
+            number=move.sequence_number,
+            colour=colour,
+            move_type=move_type,
+            piece=None,
+            from_square=None,
+            to_square=None,
+            captured_piece=None,
+            previous_turn=cast(Colour, move.previous_turn),
+            resulting_turn=cast(Colour, move.resulting_turn),
+            undo_target_number=cast(
+                int | None,
+                undo_details.get("undone_sequence_number"),
+            ),
+            undo_target_type=cast(
+                str | None,
+                undo_details.get("undone_move_type"),
+            ),
+            is_undone=move.is_undone,
+        )
+
+    if move_type == "correction":
+        return MoveRecord(
+            number=move.sequence_number,
+            colour=colour,
+            move_type=move_type,
+            piece=None,
+            from_square=None,
+            to_square=None,
+            captured_piece=None,
+            correction_changes=describe_board_changes(
+                move.board_state_before,
+                move.board_state_after,
+            ),
+            previous_turn=cast(Colour, move.previous_turn),
+            resulting_turn=cast(Colour, move.resulting_turn),
+            is_undone=move.is_undone,
+        )
+
+    castle_side: CastleSide | None = None
+
+    if move_type == "castle":
+        castle_side = (
+            "kingside"
+            if move.to_square in {"g1", "g8"}
+            else "queenside"
+        )
+
+    return MoveRecord(
+        number=move.sequence_number,
+        colour=colour,
+        move_type=move_type,
+        piece=move.piece,
+        from_square=move.from_square,
+        to_square=move.to_square,
+        captured_piece=move.captured_piece,
+        castle_side=castle_side,
+        previous_turn=cast(Colour, move.previous_turn),
+        resulting_turn=cast(Colour, move.resulting_turn),
+        is_undone=move.is_undone,
+    )

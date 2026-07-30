@@ -1,3 +1,6 @@
+from dataclasses import replace
+import logging
+from time import perf_counter
 from typing import cast
 from uuid import UUID
 
@@ -6,9 +9,10 @@ from nicegui import ui
 from app.components.interactive_game import (
     InteractiveGameState,
     MoveSubmission,
+    latest_undoable_record,
     render_interactive_game,
 )
-from app.components.position_setup import render_position_setup
+from app.models.persisted_move import Move
 from app.database.session import database_session
 from app.services.game_service import (
     GameNotActiveError,
@@ -20,11 +24,69 @@ from app.services.move_service import (
     get_move_history,
     make_move,
     make_castle,
+    persisted_move_to_record,
     undo_latest_event,
 )
 from app.repositories.game_repository import get_game_version
 from app.utils.game_sync import game_version_changed
 from app.utils.board import BoardState, CastleSide, Colour, Square
+
+
+logger = logging.getLogger(__name__)
+
+
+def append_persisted_move(
+    *,
+    state: InteractiveGameState,
+    board: BoardState,
+    current_turn: Colour,
+    move: Move,
+    actor_colour: Colour,
+) -> InteractiveGameState:
+    """Append a successfully persisted event without reloading history."""
+    return InteractiveGameState(
+        board=board,
+        current_turn=current_turn,
+        move_history=[
+            *state.move_history,
+            persisted_move_to_record(
+                move,
+                colour=actor_colour,
+            ),
+        ],
+    )
+
+
+def append_persisted_undo(
+    *,
+    state: InteractiveGameState,
+    board: BoardState,
+    current_turn: Colour,
+    move: Move,
+    actor_colour: Colour,
+) -> InteractiveGameState:
+    """Mark the local target as undone and append the undo event."""
+    history = [*state.move_history]
+    target = latest_undoable_record(history)
+
+    if target is not None:
+        target_index = history.index(target)
+        history[target_index] = replace(
+            target,
+            is_undone=True,
+        )
+
+    return InteractiveGameState(
+        board=board,
+        current_turn=current_turn,
+        move_history=[
+            *history,
+            persisted_move_to_record(
+                move,
+                colour=actor_colour,
+            ),
+        ],
+    )
 
 
 @ui.page("/play/{game_id}/{access_token}")
@@ -58,7 +120,7 @@ def persisted_game_page(
         )
         game_name = player_game.game.name
         game_status = player_game.game.status
-        
+
         initial_state = InteractiveGameState(
             board=player_game.game.board_state.copy(),
             current_turn=cast(
@@ -110,6 +172,7 @@ def persisted_game_page(
     ) -> MoveSubmission:
         """Persist one move and return the latest shared state."""
         nonlocal version
+        started_at = perf_counter()
 
         try:
             with database_session() as session:
@@ -124,16 +187,15 @@ def persisted_game_page(
 
                 version = completed.game.version
 
-                updated_state = InteractiveGameState(
+                updated_state = append_persisted_move(
+                    state=state,
                     board=completed.game.board_state.copy(),
                     current_turn=cast(
                         Colour,
                         completed.game.current_turn,
                     ),
-                    move_history=get_move_history(
-                        session,
-                        persisted_game_id,
-                    ),
+                    move=completed.move,
+                    actor_colour=player_colour,
                 )
 
             return MoveSubmission(
@@ -148,14 +210,22 @@ def persisted_game_page(
                 state=latest_state or state,
                 error_message=str(error),
             )
-            
-    
+        finally:
+            elapsed_ms = (perf_counter() - started_at) * 1000
+            logger.info(
+                "Persisted move %s-%s in %.0fms",
+                from_square,
+                to_square,
+                elapsed_ms,
+            )
+
     def submit_persisted_castle(
-    side: CastleSide,
-    state: InteractiveGameState,
-) -> MoveSubmission:
+        side: CastleSide,
+        state: InteractiveGameState,
+    ) -> MoveSubmission:
         """Persist one castle and return the latest shared state."""
         nonlocal version
+        started_at = perf_counter()
 
         try:
             with database_session() as session:
@@ -169,16 +239,15 @@ def persisted_game_page(
 
                 version = completed.game.version
 
-                updated_state = InteractiveGameState(
+                updated_state = append_persisted_move(
+                    state=state,
                     board=completed.game.board_state.copy(),
                     current_turn=cast(
                         Colour,
                         completed.game.current_turn,
                     ),
-                    move_history=get_move_history(
-                        session,
-                        persisted_game_id,
-                    ),
+                    move=completed.move,
+                    actor_colour=player_colour,
                 )
 
             return MoveSubmission(
@@ -193,15 +262,22 @@ def persisted_game_page(
                 state=latest_state or state,
                 error_message=str(error),
             )
-            
+        finally:
+            elapsed_ms = (perf_counter() - started_at) * 1000
+            logger.info(
+                "Persisted %s castle in %.0fms",
+                side,
+                elapsed_ms,
+            )
 
     def submit_persisted_correction(
-    corrected_board: BoardState,
-    corrected_turn: Colour,
-    state: InteractiveGameState,
-) -> MoveSubmission:
+        corrected_board: BoardState,
+        corrected_turn: Colour,
+        state: InteractiveGameState,
+    ) -> MoveSubmission:
         """Persist a board correction and return the shared state."""
         nonlocal version
+        started_at = perf_counter()
 
         try:
             with database_session() as session:
@@ -216,16 +292,15 @@ def persisted_game_page(
 
                 version = completed.game.version
 
-                updated_state = InteractiveGameState(
+                updated_state = append_persisted_move(
+                    state=state,
                     board=completed.game.board_state.copy(),
                     current_turn=cast(
                         Colour,
                         completed.game.current_turn,
                     ),
-                    move_history=get_move_history(
-                        session,
-                        persisted_game_id,
-                    ),
+                    move=completed.move,
+                    actor_colour=player_colour,
                 )
 
             return MoveSubmission(
@@ -240,12 +315,19 @@ def persisted_game_page(
                 state=latest_state or state,
                 error_message=str(error),
             )
+        finally:
+            elapsed_ms = (perf_counter() - started_at) * 1000
+            logger.info(
+                "Persisted correction in %.0fms",
+                elapsed_ms,
+            )
 
     def submit_persisted_undo(
-    state: InteractiveGameState,
-) -> MoveSubmission:
+        state: InteractiveGameState,
+    ) -> MoveSubmission:
         """Undo the latest active event and return shared state."""
         nonlocal version
+        started_at = perf_counter()
 
         try:
             with database_session() as session:
@@ -258,16 +340,15 @@ def persisted_game_page(
 
                 version = completed.game.version
 
-                updated_state = InteractiveGameState(
+                updated_state = append_persisted_undo(
+                    state=state,
                     board=completed.game.board_state.copy(),
                     current_turn=cast(
                         Colour,
                         completed.game.current_turn,
                     ),
-                    move_history=get_move_history(
-                        session,
-                        persisted_game_id,
-                    ),
+                    move=completed.move,
+                    actor_colour=player_colour,
                 )
 
             return MoveSubmission(
@@ -282,8 +363,13 @@ def persisted_game_page(
                 state=latest_state or state,
                 error_message=str(error),
             )
-            
-            
+        finally:
+            elapsed_ms = (perf_counter() - started_at) * 1000
+            logger.info(
+                "Persisted undo in %.0fms",
+                elapsed_ms,
+            )
+
     def load_external_state() -> InteractiveGameState | None:
         """Return canonical state only when the persisted version changed."""
         with database_session() as session:

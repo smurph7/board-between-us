@@ -51,6 +51,7 @@ body {
 .board-square {
     cursor: pointer;
     line-height: 1;
+    transition: filter 180ms ease, opacity 180ms ease;
     user-select: none;
 }
 
@@ -64,6 +65,12 @@ body {
 
 .board-square-selected {
     box-shadow: inset 0 0 0 4px var(--board-selected);
+}
+
+.board-grid.board-busy .board-square {
+    filter: grayscale(0.35) brightness(0.95);
+    opacity: 0.82;
+    pointer-events: none;
 }
 
 .piece-symbol,

@@ -137,7 +137,7 @@ def apply_external_state(
     external_state: InteractiveGameState | None,
 ) -> ExternalStateUpdate:
     """Apply external state when one is available."""
-    if external_state is None:
+    if external_state is None or external_state is current_state:
         return ExternalStateUpdate(
             state=current_state,
             selected_square=selected_square,
@@ -235,8 +235,10 @@ def render_interactive_game(
                 selected_square = square
 
             else:
+                from_square = selected_square
+
                 result = submit_move(
-                    selected_square,
+                    from_square,
                     square,
                     state,
                 )

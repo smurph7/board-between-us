@@ -116,3 +116,21 @@ def test_undo_confirmation_describes_ordinary_move() -> None:
     assert undo_confirmation_text(move) == (
         "Undo White's pawn move from e2 to e4?"
     )
+
+
+def test_apply_external_state_ignores_older_matching_state_object() -> None:
+    current_state = InteractiveGameState(
+        board={"e2": "white_pawn"},
+        current_turn="white",
+        move_history=[],
+    )
+
+    result = apply_external_state(
+        current_state=current_state,
+        selected_square=None,
+        external_state=current_state,
+    )
+
+    assert result.state is current_state
+    assert result.selected_square is None
+    assert result.changed is False

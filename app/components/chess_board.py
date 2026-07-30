@@ -50,8 +50,13 @@ def render_chess_board(
 
     files = "hgfedcba" if flipped else "abcdefgh"
     ranks = range(1, 9) if flipped else range(8, 0, -1)
+    board_state_class = (
+        "board-grid board-has-selection"
+        if selected_square is not None
+        else "board-grid"
+    )
 
-    with ui.column().classes("gap-0").on(
+    with ui.column().classes(f"gap-0 {board_state_class}").on(
         "click",
         js_handler="(event) => event.stopPropagation()",
     ):
@@ -91,7 +96,19 @@ def render_chess_board(
                     ui.label(symbol).classes(
                         f"{square_class} {selection_class} "
                         f"{BOARD_SQUARE_CLASSES}"
-                    ).on("click", partial(on_square_click, square))
+                    ).on(
+                        "click",
+                        partial(on_square_click, square),
+                        js_handler=(
+                            "(event) => {"
+                            "const board = event.currentTarget.closest('.board-grid');"
+                            "if (board?.classList.contains('board-has-selection')) {"
+                            "board.classList.add('board-busy');"
+                            "}"
+                            "emit(event);"
+                            "}"
+                        ),
+                    )
 
                 ui.label(str(rank)).classes(RANK_LABEL_CLASSES)
 

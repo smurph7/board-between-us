@@ -58,6 +58,7 @@ def render_position_setup(
     selected_square: Square | None = None
     selected_piece: Piece | None = None
     flipped = initial_flipped
+    next_turn = initial_turn
     cancel_button_props = (
         DANGER_BUTTON_PROPS
         if cancel_label == "Cancel setup"
@@ -197,32 +198,38 @@ def render_position_setup(
                 on_click=remove_selected_piece,
             ).props(DANGER_BUTTON_PROPS)
 
-        ui.label("Who moves next?")
+    def update_next_turn(event) -> None:
+        nonlocal next_turn
 
-        turn_selector = ui.radio(
-            {
-                "white": "White to move",
-                "black": "Black to move",
-            },
-            value=initial_turn,
-        ).props("inline")
-
-        def confirm_position() -> None:
-            confirm_setup(
-                board.copy(),
-                cast(Colour, turn_selector.value),
-            )
-
-        with ui.row().classes("w-full gap-2 flex-wrap"):
-            ui.button(
-                confirm_label,
-                on_click=confirm_position,
-            ).props(PRIMARY_BUTTON_PROPS)
-
-            ui.button(
-                cancel_label,
-                on_click=cancel_setup,
-            ).props(cancel_button_props)
+        next_turn = cast(Colour, event.value)
 
     render_piece_tray()
     render_editable_board()
+
+    ui.label("Who moves next?")
+
+    turn_selector = ui.radio(
+        {
+            "white": "White to move",
+            "black": "Black to move",
+        },
+        value=initial_turn,
+        on_change=update_next_turn,
+    ).props("inline")
+
+    def confirm_position() -> None:
+        confirm_setup(
+            board.copy(),
+            next_turn,
+        )
+
+    with ui.row().classes("w-full gap-2 flex-wrap"):
+        ui.button(
+            confirm_label,
+            on_click=confirm_position,
+        ).props(PRIMARY_BUTTON_PROPS)
+
+        ui.button(
+            cancel_label,
+            on_click=cancel_setup,
+        ).props(cancel_button_props)
