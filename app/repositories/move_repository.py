@@ -72,3 +72,42 @@ def list_moves(
     )
 
     return list(session.scalars(statement))
+
+
+def get_latest_active_move(
+    session: Session,
+    game_id: UUID,
+) -> Move | None:
+    """Return the latest non-undone history event for a game."""
+
+    statement = (
+        select(Move)
+        .where(
+            Move.game_id == game_id,
+            Move.is_undone.is_(False),
+        )
+        .order_by(Move.sequence_number.desc())
+        .limit(1)
+    )
+
+    return session.scalar(statement)
+
+
+def get_latest_undoable_event(
+    session: Session,
+    game_id: UUID,
+) -> Move | None:
+    """Return the latest non-undone state-changing event."""
+
+    statement = (
+        select(Move)
+        .where(
+            Move.game_id == game_id,
+            Move.is_undone.is_(False),
+            Move.move_type != "undo",
+        )
+        .order_by(Move.sequence_number.desc())
+        .limit(1)
+    )
+
+    return session.scalar(statement)

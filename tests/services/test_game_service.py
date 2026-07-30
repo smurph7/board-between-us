@@ -1,15 +1,18 @@
 from uuid import uuid4
 import pytest
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models.game import Game
 from app.models.player import Player
+from app.models.persisted_move import Move
 from app.repositories.game_repository import create_game
 from app.services.game_service import (
+    GameNotActiveError,
     GameNotInSetupError,
     confirm_game_setup,
     cancel_game_setup,
+    correct_game_position,
     create_standard_game,
     create_game_for_players,
     load_player_game,
@@ -334,3 +337,101 @@ def test_cancel_game_setup_rejects_active_game(
         )
 
     assert db_session.get(Game, game_id) is not None
+    
+    
+def test_correct_game_position_updates_state_and_records_event(
+    db_session: Session,
+) -> None:
+    created = create_standard_game(db_session)
+    game_id = created.game.id
+
+    corrected_board: BoardState = {
+        "e1": "white_king",
+        "e8": "black_king",
+        "d4": "black_queen",
+    }
+
+    completed = correct_game_position(
+        db_session,
+        game_id=game_id,
+        player_id=created.black_player.id,
+        board_state=corrected_board,
+        next_turn="black",
+        expected_version=0,
+    )
+
+    assert completed.move.sequence_number == 1
+    assert completed.move.move_type == "correction"
+    assert completed.move.player_id == created.black_player.id
+    assert completed.move.piece is None
+    assert completed.move.from_square is None
+    assert completed.move.to_square is None
+    assert completed.move.board_state_after == corrected_board
+    assert completed.move.previous_turn == "white"
+    assert completed.move.resulting_turn == "black"
+
+    db_session.flush()
+    db_session.expire_all()
+
+    game = db_session.get(Game, game_id)
+
+    assert game is not None
+    assert game.board_state == corrected_board
+    assert game.current_turn == "black"
+    assert game.version == 1
+
+    event_count = db_session.scalar(
+        select(func.count(Move.id)).where(
+            Move.game_id == game_id,
+        )
+    )
+
+    assert event_count == 1
+    
+
+def test_correct_game_position_rejects_stale_version_without_changes(
+    db_session: Session,
+) -> None:
+    created = create_standard_game(db_session)
+    original_board = created.game.board_state.copy()
+
+    with pytest.raises(StaleGameError):
+        correct_game_position(
+            db_session,
+            game_id=created.game.id,
+            player_id=created.white_player.id,
+            board_state={"e1": "white_king"},
+            next_turn="black",
+            expected_version=99,
+        )
+
+    db_session.expire_all()
+
+    game = db_session.get(Game, created.game.id)
+
+    assert game is not None
+    assert game.board_state == original_board
+    assert game.current_turn == "white"
+    assert game.version == 0
+
+
+def test_correct_game_position_rejects_setup_game(
+    db_session: Session,
+) -> None:
+    created = create_standard_game(
+        db_session,
+        status="setup",
+    )
+
+    with pytest.raises(GameNotActiveError):
+        correct_game_position(
+            db_session,
+            game_id=created.game.id,
+            player_id=created.white_player.id,
+            board_state={"e1": "white_king"},
+            next_turn="white",
+            expected_version=0,
+        )
+
+    assert created.game.status == "setup"
+    assert created.game.version == 0

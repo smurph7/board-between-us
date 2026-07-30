@@ -5,14 +5,20 @@ from sqlalchemy.orm import Session
 
 from app.models.persisted_move import Move
 from app.repositories.game_repository import get_game
-from app.services.game_service import create_standard_game
+from app.services.game_service import (
+    correct_game_position,
+    create_standard_game,
+)
 from app.services.move_service import (
     InvalidMoveError,
+    NoUndoableEventError,
     PlayerNotFoundError,
     StaleGameError,
     WrongTurnError,
-    make_move,
+    get_move_history,
     make_castle,
+    make_move,
+    undo_latest_event,
 )
 
 
@@ -405,3 +411,137 @@ def test_castle_with_stale_version_is_rejected_without_changes(
     assert game.current_turn == "white"
     assert game.version == 0
     assert move_count(db_session, game_id) == 0
+    
+
+def test_undo_latest_move_restores_board_and_turn(
+    db_session: Session,
+) -> None:
+    created = create_standard_game(db_session)
+    game_id = created.game.id
+    original_board = created.game.board_state.copy()
+
+    made_move = make_move(
+        db_session,
+        game_id=game_id,
+        player_id=created.white_player.id,
+        from_square="e2",
+        to_square="e4",
+        expected_version=0,
+    )
+
+    completed = undo_latest_event(
+        db_session,
+        game_id=game_id,
+        player_id=created.black_player.id,
+        expected_version=1,
+    )
+
+    assert made_move.move.is_undone is True
+
+    assert completed.move.sequence_number == 2
+    assert completed.move.move_type == "undo"
+    assert completed.move.changes == [
+        {
+            "undone_move_id": str(made_move.move.id),
+            "undone_sequence_number": 1,
+            "undone_move_type": "move",
+        }
+    ]
+
+    db_session.flush()
+    db_session.expire_all()
+
+    game = get_game(db_session, game_id)
+
+    assert game is not None
+    assert game.board_state == original_board
+    assert game.current_turn == "white"
+    assert game.version == 2
+    assert move_count(db_session, game_id) == 2
+    
+    history = get_move_history(
+        db_session,
+        game_id,
+    )
+
+    assert len(history) == 2
+
+    assert history[0].move_type == "move"
+    assert history[0].is_undone is True
+
+    assert history[1].move_type == "undo"
+    assert history[1].undo_target_number == 1
+    assert history[1].undo_target_type == "move"
+    
+    
+def test_undo_latest_correction_restores_previous_position(
+    db_session: Session,
+) -> None:
+    created = create_standard_game(db_session)
+    game_id = created.game.id
+    original_board = created.game.board_state.copy()
+
+    correction = correct_game_position(
+        db_session,
+        game_id=game_id,
+        player_id=created.black_player.id,
+        board_state={
+            "e1": "white_king",
+            "e8": "black_king",
+            "d4": "black_queen",
+        },
+        next_turn="black",
+        expected_version=0,
+    )
+
+    completed = undo_latest_event(
+        db_session,
+        game_id=game_id,
+        player_id=created.white_player.id,
+        expected_version=1,
+    )
+
+    assert correction.move.is_undone is True
+    assert completed.move.move_type == "undo"
+
+    db_session.flush()
+    db_session.expire_all()
+
+    game = get_game(db_session, game_id)
+
+    assert game is not None
+    assert game.board_state == original_board
+    assert game.current_turn == "white"
+    assert game.version == 2
+    assert move_count(db_session, game_id) == 2
+    
+    
+def test_undo_is_rejected_when_there_is_nothing_to_undo(
+    db_session: Session,
+) -> None:
+    created = create_standard_game(db_session)
+    original_board = created.game.board_state.copy()
+
+    with pytest.raises(
+        NoUndoableEventError,
+        match="There is nothing to undo",
+    ):
+        undo_latest_event(
+            db_session,
+            game_id=created.game.id,
+            player_id=created.white_player.id,
+            expected_version=0,
+        )
+
+    db_session.expire_all()
+
+    game = get_game(
+        db_session,
+        created.game.id,
+    )
+
+    assert game is not None
+    assert game.board_state == original_board
+    assert game.current_turn == "white"
+    assert game.version == 0
+    assert move_count(db_session, game.id) == 0

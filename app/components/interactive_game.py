@@ -4,6 +4,7 @@ from functools import partial
 from nicegui import ui
 
 from app.components.game_view import render_game_view
+from app.components.position_setup import render_position_setup
 from app.models.move import MoveRecord
 from app.utils.board import (
     BoardState,
@@ -43,6 +44,17 @@ type SubmitCastle = Callable[
 ]
 
 
+type SubmitCorrection = Callable[
+    [BoardState, Colour, InteractiveGameState],
+    MoveSubmission,
+]
+
+
+type SubmitUndo = Callable[
+    [InteractiveGameState],
+    MoveSubmission,
+]
+
 @dataclass(frozen=True)
 class ExternalStateUpdate:
     """Result of applying a possible external game update."""
@@ -56,6 +68,65 @@ type LoadExternalState = Callable[
     [],
     InteractiveGameState | None,
 ]
+
+
+def latest_undoable_record(
+    move_history: list[MoveRecord],
+) -> MoveRecord | None:
+    """Return the latest history event which has not been undone."""
+
+    return next(
+        (
+            move
+            for move in reversed(move_history)
+            if move.move_type != "undo"
+            and not move.is_undone
+        ),
+        None,
+    )
+
+
+def undo_button_label(move: MoveRecord) -> str:
+    """Return a contextual label for the undo action."""
+
+    if move.move_type == "correction":
+        return "Undo correction"
+
+    if move.move_type == "castle":
+        return "Undo castle"
+
+    return "Undo latest move"
+
+
+def undo_confirmation_text(move: MoveRecord) -> str:
+    """Return a readable confirmation question."""
+
+    actor = move.colour.capitalize()
+
+    if move.move_type == "correction":
+        return f"Undo {actor}'s board correction?"
+
+    if move.move_type == "castle":
+        return (
+            f"Undo {actor}'s "
+            f"{move.castle_side or ''} castle?"
+        )
+
+    if (
+        move.piece is not None
+        and move.from_square is not None
+        and move.to_square is not None
+    ):
+        piece_name = move.piece.removeprefix(
+            f"{move.colour}_"
+        )
+
+        return (
+            f"Undo {actor}'s {piece_name} move "
+            f"from {move.from_square} to {move.to_square}?"
+        )
+
+    return f"Undo {actor}'s latest event?"
 
 
 def apply_external_state(
@@ -84,6 +155,8 @@ def render_interactive_game(
     initial_state: InteractiveGameState,
     submit_move: SubmitMove,
     submit_castle: SubmitCastle | None = None,
+    submit_correction: SubmitCorrection | None = None,
+    submit_undo: SubmitUndo | None = None,
     title: str | None = None,
     player_colour: Colour | None = None,
     initial_flipped: bool = False,
@@ -93,6 +166,7 @@ def render_interactive_game(
     state = initial_state
     selected_square: Square | None = None
     flipped = initial_flipped
+    correcting_position = False
 
     def active_colour() -> Colour:
         """Return the colour this page may currently select."""
@@ -196,7 +270,7 @@ def render_interactive_game(
         game_view.refresh()
         
     def refresh_external_state() -> None:
-        nonlocal state, selected_square
+        nonlocal state, selected_square, correcting_position
         
         if load_external_state is None:
             return
@@ -214,6 +288,7 @@ def render_interactive_game(
         
         state = update.state
         selected_square = update.selected_square
+        correcting_position = False
         game_view.refresh()
 
 
@@ -277,10 +352,135 @@ def render_interactive_game(
                 )
 
         dialog.open()
+        
+    
+    def enter_correction_mode() -> None:
+        """Open the correction editor from the latest displayed state."""
+        nonlocal correcting_position, selected_square
+
+        if submit_correction is None:
+            return
+
+        selected_square = None
+        correcting_position = True
+        game_view.refresh()
+
+
+    def cancel_correction() -> None:
+        """Discard local correction edits and return to the game."""
+        nonlocal correcting_position
+
+        correcting_position = False
+        game_view.refresh()
+
+
+    def save_correction(
+        corrected_board: BoardState,
+        corrected_turn: Colour,
+    ) -> None:
+        """Submit a corrected board and return to the normal game view."""
+        nonlocal state, selected_square, correcting_position
+
+        if submit_correction is None:
+            return
+
+        result = submit_correction(
+            corrected_board,
+            corrected_turn,
+            state,
+        )
+
+        state = result.state
+        selected_square = None
+        correcting_position = False
+
+        if result.success_message:
+            ui.notify(
+                result.success_message,
+                type="positive",
+            )
+
+        if result.error_message:
+            ui.notify(
+                result.error_message,
+                type="negative",
+            )
+
+        game_view.refresh()
+        
+    
+    def show_undo_confirmation() -> None:
+        """Ask the player to confirm undoing the latest active event."""
+        nonlocal state, selected_square
+
+        if submit_undo is None:
+            return
+
+        target = latest_undoable_record(
+            state.move_history,
+        )
+
+        if target is None:
+            return
+
+        def confirm_undo() -> None:
+            nonlocal state, selected_square
+
+            result = submit_undo(state)
+
+            state = result.state
+            selected_square = None
+            dialog.close()
+
+            if result.success_message:
+                ui.notify(
+                    result.success_message,
+                    type="positive",
+                )
+
+            if result.error_message:
+                ui.notify(
+                    result.error_message,
+                    type="negative",
+                )
+
+            game_view.refresh()
+
+        with ui.dialog() as dialog, ui.card():
+            ui.label("Confirm undo").classes("text-h6")
+            ui.label(undo_confirmation_text(target))
+
+            with ui.row().classes(
+                "w-full justify-end gap-2"
+            ):
+                ui.button(
+                    "Cancel",
+                    on_click=dialog.close,
+                ).props("flat")
+
+                ui.button(
+                    "Undo",
+                    on_click=confirm_undo,
+                )
+
+        dialog.open()
     
 
     @ui.refreshable
     def game_view() -> None:
+        if correcting_position:
+            render_position_setup(
+                initial_board=state.board,
+                initial_turn=state.current_turn,
+                initial_flipped=flipped,
+                confirm_setup=save_correction,
+                cancel_setup=cancel_correction,
+                title="Correct board position",
+                confirm_label="Save correction",
+                cancel_label="Cancel",
+            )
+            return
+        
         ui.label(title or "Board Between Us").classes("text-h5")
 
         castle_sides = available_castle_sides()
@@ -313,6 +513,17 @@ def render_interactive_game(
                 js_handler="(event) => event.stopPropagation()",
             )
             
+        if submit_correction is not None:
+            ui.button(
+                "Correct position",
+                on_click=enter_correction_mode,
+            ).props("outline")
+        
+            
+        undo_target = latest_undoable_record(
+            state.move_history
+        )
+            
         render_game_view(
             board=state.board,
             selected_square=selected_square,
@@ -322,6 +533,17 @@ def render_interactive_game(
             on_square_click=handle_square_click,
             on_flip=toggle_orientation,
             player_colour=player_colour,
+            on_undo=(
+                show_undo_confirmation
+                if submit_undo is not None
+                and undo_target is not None
+                else None
+            ),
+            undo_label=(
+                undo_button_label(undo_target)
+                if undo_target is not None
+                else "Undo"
+            ),
         )
     
     

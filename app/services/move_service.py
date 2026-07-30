@@ -12,7 +12,8 @@ from app.repositories.game_repository import get_game_for_update
 from app.repositories.move_repository import (
     create_move,
     get_next_sequence_number,
-    list_moves
+    list_moves,
+    get_latest_undoable_event,
 )
 from app.repositories.player_repository import get_player
 from app.utils.board import (
@@ -24,6 +25,7 @@ from app.utils.board import (
     next_turn,
     piece_belongs_to,
 )
+from app.utils.formatting import describe_board_changes
 
 class MoveError(Exception):
     """Base error for rejected moves."""
@@ -48,6 +50,8 @@ class StaleGameError(MoveError):
 class InvalidMoveError(MoveError):
     """Raised when a requested board move is invalid."""
 
+class NoUndoableEventError(MoveError):
+    """Raised when a game has no event which can be undone."""
 
 @dataclass(frozen=True)
 class CompletedMove:
@@ -252,41 +256,223 @@ def make_castle(
         game=game,
         move=move,
     )    
-    
+  
+
+def undo_latest_event(
+    session: Session,
+    *,
+    game_id: UUID,
+    player_id: UUID,
+    expected_version: int,
+) -> CompletedMove:
+    """Undo the latest active move, castle, or correction."""
+
+    game = get_game_for_update(session, game_id)
+
+    if game is None:
+        raise GameNotFoundError("Game does not exist")
+
+    player = get_player(session, player_id)
+
+    if player is None or player.game_id != game.id:
+        raise PlayerNotFoundError(
+            "Player does not belong to this game"
+        )
+
+    if game.version != expected_version:
+        raise StaleGameError(
+            "The board changed on another device"
+        )
+
+    if game.status != "active":
+        raise InvalidMoveError(
+            "Only active games can be undone"
+        )
+
+    target = get_latest_undoable_event(
+        session,
+        game.id,
+    )
+
+    if target is None:
+        raise NoUndoableEventError(
+            "There is nothing to undo"
+        )
+
+    if (
+        game.board_state != target.board_state_after
+        or game.current_turn != target.resulting_turn
+    ):
+        raise InvalidMoveError(
+            "The latest history event does not match "
+            "the current game state"
+        )
+
+    board_before = game.board_state.copy()
+    board_after = target.board_state_before.copy()
+    restored_turn = cast(Colour, target.previous_turn)
+
+    sequence_number = get_next_sequence_number(
+        session,
+        game.id,
+    )
+
+    undo_move = create_move(
+        session,
+        game_id=game.id,
+        player_id=player.id,
+        sequence_number=sequence_number,
+        move_type="undo",
+        piece=None,
+        from_square=None,
+        to_square=None,
+        captured_piece=None,
+        changes=[
+            {
+                "undone_move_id": str(target.id),
+                "undone_sequence_number": target.sequence_number,
+                "undone_move_type": target.move_type,
+            }
+        ],
+        board_state_before=board_before,
+        board_state_after=board_after,
+        previous_turn=game.current_turn,
+        resulting_turn=restored_turn,
+    )
+
+    target.is_undone = True
+
+    game.board_state = board_after
+    game.current_turn = restored_turn
+    game.version += 1
+    game.updated_at = datetime.now(timezone.utc)
+
+    session.flush()
+
+    return CompletedMove(
+        game=game,
+        move=undo_move,
+    )
+      
 
 def get_move_history(
     session: Session,
     game_id: UUID,
 ) -> list[MoveRecord]:
-    """Return persisted ordinary moves in the UI's history format."""
+    """Return persisted game events in the UI's history format."""
+
     records: list[MoveRecord] = []
+    player_colours: dict[UUID, Colour] = {}
 
     for move in list_moves(session, game_id):
+        actor_colour = player_colours.get(move.player_id)
+
+        if actor_colour is None:
+            player = get_player(session, move.player_id)
+
+            if player is None:
+                continue
+
+            actor_colour = cast(Colour, player.colour)
+            player_colours[move.player_id] = actor_colour
+
+        move_type = cast(MoveType, move.move_type)
+        
+        if move_type == "undo":
+            undo_details = move.changes[0] if move.changes else {}
+
+            records.append(
+                MoveRecord(
+                    number=move.sequence_number,
+                    colour=actor_colour,
+                    move_type=move_type,
+                    piece=None,
+                    from_square=None,
+                    to_square=None,
+                    captured_piece=None,
+                    previous_turn=cast(
+                        Colour,
+                        move.previous_turn,
+                    ),
+                    resulting_turn=cast(
+                        Colour,
+                        move.resulting_turn,
+                    ),
+                    undo_target_number=cast(
+                        int | None,
+                        undo_details.get("undone_sequence_number"),
+                    ),
+                    undo_target_type=cast(
+                        str | None,
+                        undo_details.get("undone_move_type"),
+                    ),
+                    is_undone=move.is_undone,
+                )
+            )
+            continue
+
+        if move_type == "correction":
+            records.append(
+                MoveRecord(
+                    number=move.sequence_number,
+                    colour=actor_colour,
+                    move_type=move_type,
+                    piece=None,
+                    from_square=None,
+                    to_square=None,
+                    captured_piece=None,
+                    correction_changes=describe_board_changes(
+                        move.board_state_before,
+                        move.board_state_after,
+                    ),
+                    previous_turn=cast(
+                        Colour,
+                        move.previous_turn,
+                    ),
+                    resulting_turn=cast(
+                        Colour,
+                        move.resulting_turn,
+                    ),
+                    is_undone=move.is_undone,
+                )
+            )
+            continue
+
         if (
             move.piece is None
             or move.from_square is None
             or move.to_square is None
         ):
             continue
-        
+
         castle_side: CastleSide | None = None
-        if move.move_type == "castle":
+
+        if move_type == "castle":
             castle_side = (
                 "kingside"
                 if move.to_square in {"g1", "g8"}
                 else "queenside"
             )
-            
+
         records.append(
             MoveRecord(
                 number=move.sequence_number,
-                colour=cast(Colour, move.previous_turn),
-                move_type=cast(MoveType, move.move_type),
+                colour=actor_colour,
+                move_type=move_type,
                 piece=move.piece,
                 from_square=move.from_square,
                 to_square=move.to_square,
                 captured_piece=move.captured_piece,
                 castle_side=castle_side,
+                previous_turn=cast(
+                    Colour,
+                    move.previous_turn,
+                ),
+                resulting_turn=cast(
+                    Colour,
+                    move.resulting_turn,
+                ),
+                is_undone=move.is_undone,
             )
         )
 

@@ -1,12 +1,14 @@
 from dataclasses import dataclass
 from uuid import UUID
 from typing import Literal
+from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.models.game import Game
 from app.models.player import Player
+from app.models.persisted_move import Move
 from app.repositories.game_repository import (
     create_game,
     delete_game, 
@@ -15,14 +17,34 @@ from app.repositories.game_repository import (
 )
 from app.repositories.player_repository import (
     create_player,
+    get_player,
     get_player_by_token_hash,
 )
-from app.services.move_service import GameNotFoundError, StaleGameError
+from app.repositories.move_repository import (
+    create_move,
+    get_next_sequence_number,
+)
+from app.services.move_service import (
+    GameNotFoundError,
+    PlayerNotFoundError,
+    StaleGameError,
+)
 from app.services.token_service import generate_access_token, hash_access_token
 from app.utils.board import BoardState, Colour, create_standard_board
 
 class GameNotInSetupError(Exception):
     """Raised when a setup-only operation targets an active game."""
+   
+class GameNotActiveError(Exception):
+    """Raised when an active-game operation targets another status."""
+    
+    
+@dataclass(frozen=True)
+class CompletedCorrection:
+    """The updated game and persisted correction event."""
+
+    game: Game
+    move: Move
     
 @dataclass(frozen=True)
 class CreatedGame:
@@ -227,3 +249,75 @@ def cancel_game_setup(
         )
 
     delete_game(session, game)
+    
+
+def correct_game_position(
+    session: Session,
+    *,
+    game_id: UUID,
+    player_id: UUID,
+    board_state: BoardState,
+    next_turn: Colour,
+    expected_version: int,
+) -> CompletedCorrection:
+    """Persist an administrative correction to an active game."""
+
+    game = get_game_for_update(session, game_id)
+
+    if game is None:
+        raise GameNotFoundError("Game does not exist")
+
+    player = get_player(session, player_id)
+
+    if player is None or player.game_id != game.id:
+        raise PlayerNotFoundError(
+            "Player does not belong to this game"
+        )
+
+    if game.version != expected_version:
+        raise StaleGameError(
+            "The board changed on another device"
+        )
+
+    if game.status != "active":
+        raise GameNotActiveError(
+            "Only active games can be corrected"
+        )
+
+    board_before = game.board_state.copy()
+    board_after = dict(board_state)
+    previous_turn = game.current_turn
+
+    sequence_number = get_next_sequence_number(
+        session,
+        game.id,
+    )
+
+    move = create_move(
+        session,
+        game_id=game.id,
+        player_id=player.id,
+        sequence_number=sequence_number,
+        move_type="correction",
+        piece=None,
+        from_square=None,
+        to_square=None,
+        captured_piece=None,
+        board_state_before=board_before,
+        board_state_after=board_after,
+        previous_turn=previous_turn,
+        resulting_turn=next_turn,
+        changes=[],
+    )
+
+    game.board_state = board_after
+    game.current_turn = next_turn
+    game.version += 1
+    game.updated_at = datetime.now(timezone.utc)
+
+    session.flush()
+
+    return CompletedCorrection(
+        game=game,
+        move=move,
+    )

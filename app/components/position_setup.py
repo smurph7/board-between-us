@@ -42,15 +42,17 @@ def render_position_setup(
     initial_flipped: bool,
     confirm_setup: ConfirmSetup,
     cancel_setup: CancelSetup,
+    title: str = "Set up starting position",
+    confirm_label: str = "Start online game",
+    cancel_label: str = "Cancel setup",
 ) -> None:
     """Render an editable starting-position interface."""
     board = initial_board.copy()
     selected_square: Square | None = None
     selected_piece: Piece | None = None
     flipped = initial_flipped
-    next_turn: Colour = initial_turn
 
-    ui.label("Set up starting position")
+    ui.label(title).classes("text-h5")
     
     def remove_selected_piece() -> None:
         nonlocal board, selected_square
@@ -128,11 +130,6 @@ def render_position_setup(
         board = reset_board(board)
         selected_square = None
         render_editable_board.refresh()
-        
-        
-    def select_next_turn(colour: Colour) -> None:
-        nonlocal next_turn
-        next_turn = colour
     
     
     with ui.row():
@@ -192,7 +189,7 @@ def render_position_setup(
                 "white": "White to move",
                 "black": "Black to move",
             },
-            value=next_turn,
+            value=initial_turn,
         ).props("inline")
         
         def confirm_position() -> None:
@@ -203,12 +200,12 @@ def render_position_setup(
             
         with ui.row():
             ui.button(
-                "Start online game",
+                confirm_label,
                 on_click=confirm_position,
             )
 
             ui.button(
-                "Cancel setup",
+                cancel_label,
                 on_click=cancel_setup,
             ).props("outline")
     

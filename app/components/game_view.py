@@ -18,6 +18,8 @@ def render_game_view(
     on_square_click: Callable[[Square], None],
     on_flip: Callable[[], None],
     player_colour: Colour | None = None,
+    on_undo: Callable[[], None] | None = None,
+    undo_label: str = "Undo",
 ) -> None:
     """Render the shared game board, controls, and move history."""
     if player_colour is not None:
@@ -34,4 +36,8 @@ def render_game_view(
 
     ui.button("Flip board", on_click=on_flip)
 
-    render_move_history(move_history)
+    render_move_history(
+        move_history,
+        on_undo=on_undo,
+        undo_label=undo_label,
+    )

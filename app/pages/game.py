@@ -10,16 +10,21 @@ from app.components.interactive_game import (
 )
 from app.components.position_setup import render_position_setup
 from app.database.session import database_session
-from app.services.game_service import load_player_game
+from app.services.game_service import (
+    GameNotActiveError,
+    correct_game_position,
+    load_player_game,
+)
 from app.services.move_service import (
     MoveError,
     get_move_history,
     make_move,
     make_castle,
+    undo_latest_event,
 )
 from app.repositories.game_repository import get_game_version
 from app.utils.game_sync import game_version_changed
-from app.utils.board import CastleSide, Colour, Square
+from app.utils.board import BoardState, CastleSide, Colour, Square
 
 
 @ui.page("/play/{game_id}/{access_token}")
@@ -190,6 +195,95 @@ def persisted_game_page(
             )
             
 
+    def submit_persisted_correction(
+    corrected_board: BoardState,
+    corrected_turn: Colour,
+    state: InteractiveGameState,
+) -> MoveSubmission:
+        """Persist a board correction and return the shared state."""
+        nonlocal version
+
+        try:
+            with database_session() as session:
+                completed = correct_game_position(
+                    session,
+                    game_id=persisted_game_id,
+                    player_id=player_id,
+                    board_state=corrected_board,
+                    next_turn=corrected_turn,
+                    expected_version=version,
+                )
+
+                version = completed.game.version
+
+                updated_state = InteractiveGameState(
+                    board=completed.game.board_state.copy(),
+                    current_turn=cast(
+                        Colour,
+                        completed.game.current_turn,
+                    ),
+                    move_history=get_move_history(
+                        session,
+                        persisted_game_id,
+                    ),
+                )
+
+            return MoveSubmission(
+                state=updated_state,
+                success_message="Board position corrected",
+            )
+
+        except (MoveError, GameNotActiveError) as error:
+            latest_state = load_current_state()
+
+            return MoveSubmission(
+                state=latest_state or state,
+                error_message=str(error),
+            )
+
+    def submit_persisted_undo(
+    state: InteractiveGameState,
+) -> MoveSubmission:
+        """Undo the latest active event and return shared state."""
+        nonlocal version
+
+        try:
+            with database_session() as session:
+                completed = undo_latest_event(
+                    session,
+                    game_id=persisted_game_id,
+                    player_id=player_id,
+                    expected_version=version,
+                )
+
+                version = completed.game.version
+
+                updated_state = InteractiveGameState(
+                    board=completed.game.board_state.copy(),
+                    current_turn=cast(
+                        Colour,
+                        completed.game.current_turn,
+                    ),
+                    move_history=get_move_history(
+                        session,
+                        persisted_game_id,
+                    ),
+                )
+
+            return MoveSubmission(
+                state=updated_state,
+                success_message="Latest event undone",
+            )
+
+        except MoveError as error:
+            latest_state = load_current_state()
+
+            return MoveSubmission(
+                state=latest_state or state,
+                error_message=str(error),
+            )
+            
+            
     def load_external_state() -> InteractiveGameState | None:
         """Return canonical state only when the persisted version changed."""
         with database_session() as session:
@@ -217,6 +311,8 @@ def persisted_game_page(
         initial_state=initial_state,
         submit_move=submit_persisted_move,
         submit_castle=submit_persisted_castle,
+        submit_correction=submit_persisted_correction,
+        submit_undo=submit_persisted_undo,
         player_colour=player_colour,
         initial_flipped=player_colour == "black",
         load_external_state=load_external_state,
