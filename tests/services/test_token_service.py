@@ -1,4 +1,8 @@
-from app.services.token_service import generate_access_token, hash_access_token
+from app.services.token_service import (
+    generate_access_token,
+    generate_telegram_link_token,
+    hash_access_token,
+)
 
 
 def test_generated_access_tokens_are_unique() -> None:
@@ -29,3 +33,16 @@ def test_access_token_hash_is_sha256_hexadecimal() -> None:
 
     assert len(token_hash) == 64
     assert set(token_hash) <= set("0123456789abcdef")
+
+
+def test_telegram_link_tokens_fit_deep_link_payloads() -> None:
+    first_token = generate_telegram_link_token()
+    second_token = generate_telegram_link_token()
+
+    assert first_token != second_token
+    assert len(first_token) <= 64
+    assert set(first_token) <= set(
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        "abcdefghijklmnopqrstuvwxyz"
+        "0123456789-_"
+    )

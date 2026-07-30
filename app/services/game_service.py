@@ -18,6 +18,7 @@ from app.repositories.game_repository import (
 from app.repositories.player_repository import (
     create_player,
     get_player,
+    get_player_by_telegram_link_token,
     get_player_by_token_hash,
 )
 from app.repositories.move_repository import (
@@ -29,7 +30,11 @@ from app.services.move_service import (
     PlayerNotFoundError,
     StaleGameError,
 )
-from app.services.token_service import generate_access_token, hash_access_token
+from app.services.token_service import (
+    generate_access_token,
+    generate_telegram_link_token,
+    hash_access_token,
+)
 from app.utils.board import BoardState, Colour, create_standard_board
 
 class GameNotInSetupError(Exception):
@@ -90,6 +95,7 @@ def create_standard_game(
         colour="white",
         display_name=white_display_name,
         access_token_hash=hash_access_token(white_access_token),
+        telegram_link_token=generate_telegram_link_token(),
     )
 
     black_player = create_player(
@@ -98,6 +104,7 @@ def create_standard_game(
         colour="black",
         display_name=black_display_name,
         access_token_hash=hash_access_token(black_access_token),
+        telegram_link_token=generate_telegram_link_token(),
     )
 
     return CreatedGame(
@@ -186,6 +193,12 @@ def load_player_game(
         session,
         hash_access_token(access_token),
     )
+
+    if player is None:
+        player = get_player_by_telegram_link_token(
+            session,
+            access_token,
+        )
 
     if player is None or player.game_id != game_id:
         return None

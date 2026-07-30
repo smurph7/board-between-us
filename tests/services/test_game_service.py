@@ -96,6 +96,28 @@ def test_valid_token_loads_correct_player(
     assert result.player.colour == "white"
 
 
+def test_telegram_token_loads_only_its_player_seat(
+    db_session: Session,
+) -> None:
+    created = create_standard_game(db_session)
+
+    assert created.white_player.telegram_link_token is not None
+    assert created.black_player.telegram_link_token is not None
+    assert (
+        created.white_player.telegram_link_token
+        != created.black_player.telegram_link_token
+    )
+
+    result = load_player_game(
+        db_session,
+        game_id=created.game.id,
+        access_token=created.white_player.telegram_link_token,
+    )
+
+    assert result is not None
+    assert result.player.id == created.white_player.id
+
+
 def test_invalid_token_returns_none(
     db_session: Session,
 ) -> None:

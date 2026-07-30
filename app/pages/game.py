@@ -1,11 +1,13 @@
-from dataclasses import replace
+from dataclasses import dataclass, replace
 import logging
 from time import perf_counter
 from typing import cast
 from uuid import UUID
 
 from nicegui import ui
+from sqlalchemy.orm import Session
 
+from app.config import get_settings
 from app.components.interactive_game import (
     InteractiveGameState,
     MoveSubmission,
@@ -28,11 +30,34 @@ from app.services.move_service import (
     undo_latest_event,
 )
 from app.repositories.game_repository import get_game_version
+from app.repositories.player_repository import (
+    disconnect_telegram,
+    ensure_telegram_link_token,
+    get_other_player,
+    get_player,
+    set_notifications_enabled,
+)
+from app.services.telegram_service import (
+    TelegramMessage,
+    build_move_notification,
+    send_telegram_message,
+    telegram_deep_link,
+)
+from app.services.token_service import generate_telegram_link_token
 from app.utils.game_sync import game_version_changed
 from app.utils.board import BoardState, CastleSide, Colour, Square
 
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class TelegramPlayerStatus:
+    """Telegram state displayed on one private player page."""
+
+    link_token: str
+    connected: bool
+    notifications_enabled: bool
 
 
 def append_persisted_move(
@@ -95,6 +120,7 @@ def persisted_game_page(
     access_token: str,
 ) -> None:
     """Render a persisted game through a private player link."""
+    settings = get_settings()
     try:
         parsed_game_id = UUID(game_id)
     except ValueError:
@@ -120,6 +146,16 @@ def persisted_game_page(
         )
         game_name = player_game.game.name
         game_status = player_game.game.status
+        telegram_link_token = ensure_telegram_link_token(
+            session,
+            player_game.player,
+            token=generate_telegram_link_token(),
+        )
+        initial_telegram_status = TelegramPlayerStatus(
+            link_token=telegram_link_token,
+            connected=player_game.player.telegram_chat_id is not None,
+            notifications_enabled=player_game.player.notifications_enabled,
+        )
 
         initial_state = InteractiveGameState(
             board=player_game.game.board_state.copy(),
@@ -136,6 +172,43 @@ def persisted_game_page(
         initial_version = player_game.game.version
 
     version = initial_version
+    telegram_status = initial_telegram_status
+
+    def deliver_notification(
+        message: TelegramMessage | None,
+    ) -> bool:
+        """Deliver a prepared message after its move transaction committed."""
+        if message is None:
+            return True
+        if settings.telegram_bot_token is None:
+            logger.warning(
+                "Telegram delivery skipped because the bot is not configured"
+            )
+            return False
+        return send_telegram_message(
+            bot_token=settings.telegram_bot_token,
+            message=message,
+        )
+
+    def prepare_notification(
+        session: Session,
+        move: Move,
+    ) -> TelegramMessage | None:
+        """Snapshot recipient data while the successful transaction is open."""
+        actor = get_player(session, player_id)
+        recipient = get_other_player(
+            session,
+            game_id=persisted_game_id,
+            player_id=player_id,
+        )
+        if actor is None or recipient is None:
+            return None
+        return build_move_notification(
+            move=move,
+            actor=actor,
+            recipient=recipient,
+            app_base_url=settings.app_base_url,
+        )
 
     def load_current_state() -> InteractiveGameState | None:
         """Reload the canonical game state from the database."""
@@ -175,6 +248,7 @@ def persisted_game_page(
         started_at = perf_counter()
 
         try:
+            notification = None
             with database_session() as session:
                 completed = make_move(
                     session,
@@ -198,9 +272,23 @@ def persisted_game_page(
                     actor_colour=player_colour,
                 )
 
+                notification = prepare_notification(
+                    session,
+                    completed.move,
+                )
+
+            delivered = deliver_notification(notification)
+
             return MoveSubmission(
                 state=updated_state,
-                success_message="Move saved",
+                success_message=(
+                    "Move saved"
+                    if delivered
+                    else (
+                        "Move saved, but Telegram notification "
+                        "could not be sent"
+                    )
+                ),
             )
 
         except MoveError as error:
@@ -228,6 +316,7 @@ def persisted_game_page(
         started_at = perf_counter()
 
         try:
+            notification = None
             with database_session() as session:
                 completed = make_castle(
                     session,
@@ -250,9 +339,23 @@ def persisted_game_page(
                     actor_colour=player_colour,
                 )
 
+                notification = prepare_notification(
+                    session,
+                    completed.move,
+                )
+
+            delivered = deliver_notification(notification)
+
             return MoveSubmission(
                 state=updated_state,
-                success_message=f"Castled {side}",
+                success_message=(
+                    f"Castled {side}"
+                    if delivered
+                    else (
+                        "Castle saved, but Telegram notification "
+                        "could not be sent"
+                    )
+                ),
             )
 
         except MoveError as error:
@@ -386,6 +489,120 @@ def persisted_game_page(
 
         return load_current_state()
 
+    def load_telegram_status() -> TelegramPlayerStatus | None:
+        """Load the current player's Telegram connection state."""
+        with database_session() as session:
+            player = get_player(session, player_id)
+            if player is None or player.telegram_link_token is None:
+                return None
+            return TelegramPlayerStatus(
+                link_token=player.telegram_link_token,
+                connected=player.telegram_chat_id is not None,
+                notifications_enabled=player.notifications_enabled,
+            )
+
+    def refresh_telegram_status() -> None:
+        """Refresh Telegram controls when the webhook changes the seat."""
+        nonlocal telegram_status
+        current = load_telegram_status()
+        if current is None or current == telegram_status:
+            return
+        telegram_status = current
+        telegram_controls.refresh()
+
+    def update_notification_preference(event) -> None:
+        """Persist this player's Telegram notification preference."""
+        nonlocal telegram_status
+        enabled = bool(event.value)
+        with database_session() as session:
+            player = get_player(session, player_id)
+            if player is None:
+                return
+            set_notifications_enabled(
+                session,
+                player,
+                enabled=enabled,
+            )
+        telegram_status = replace(
+            telegram_status,
+            notifications_enabled=enabled,
+        )
+
+    def show_disconnect_confirmation() -> None:
+        """Confirm Telegram disconnection and credential revocation."""
+        def confirm_disconnect() -> None:
+            nonlocal telegram_status
+            replacement_token = generate_telegram_link_token()
+            with database_session() as session:
+                player = get_player(session, player_id)
+                if player is None:
+                    return
+                disconnect_telegram(
+                    session,
+                    player,
+                    replacement_token=replacement_token,
+                )
+            telegram_status = TelegramPlayerStatus(
+                link_token=replacement_token,
+                connected=False,
+                notifications_enabled=True,
+            )
+            dialog.close()
+            telegram_controls.refresh()
+
+        with ui.dialog() as dialog, ui.card():
+            ui.label("Disconnect Telegram?").classes("text-h6")
+            ui.label("Old Telegram board links will stop working.")
+            with ui.row().classes("w-full justify-end gap-2"):
+                ui.button("Cancel", on_click=dialog.close).props("flat")
+                ui.button(
+                    "Disconnect",
+                    on_click=confirm_disconnect,
+                ).props("outline color=negative")
+        dialog.open()
+
+    @ui.refreshable
+    def telegram_controls() -> None:
+        """Render seat-specific Telegram connection controls."""
+        with ui.expansion("Telegram", value=False).classes("w-full"):
+            with ui.column().classes("w-full gap-2 pb-2"):
+
+                if (
+                    not settings.telegram_bot_token
+                    or not settings.telegram_bot_username
+                ):
+                    ui.label("Telegram is not configured.").classes(
+                        "text-sm text-grey-7"
+                    )
+                    return
+
+                if not telegram_status.connected:
+                    deep_link = telegram_deep_link(
+                        settings.telegram_bot_username,
+                        telegram_status.link_token,
+                    )
+                    ui.button(
+                        "Connect Telegram",
+                        on_click=lambda: ui.navigate.to(
+                            deep_link,
+                            new_tab=True,
+                        ),
+                    ).props("outline color=primary")
+                    return
+
+                ui.label("Telegram connected").classes(
+                    "text-sm text-positive"
+                )
+                ui.switch(
+                    "Move notifications",
+                    value=telegram_status.notifications_enabled,
+                    on_change=update_notification_preference,
+                )
+                ui.button(
+                    "Disconnect Telegram",
+                    on_click=show_disconnect_confirmation,
+                ).props("flat color=negative")
+
     if game_status == "setup":
         ui.label(
             "This game is still being set up by its creator."
@@ -402,4 +619,6 @@ def persisted_game_page(
         player_colour=player_colour,
         initial_flipped=player_colour == "black",
         load_external_state=load_external_state,
+        render_status=telegram_controls,
     )
+    ui.timer(2.0, refresh_telegram_status)

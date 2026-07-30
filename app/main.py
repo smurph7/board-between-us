@@ -1,6 +1,7 @@
 from nicegui import ui
 
 from app.pages import demo, game, home  # noqa: F401
+from app import telegram  # noqa: F401
 from app.theme import configure_theme
 
 

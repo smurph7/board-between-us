@@ -21,6 +21,7 @@ def render_game_view(
     player_colour: Colour | None = None,
     on_undo: Callable[[], None] | None = None,
     undo_label: str = "Undo",
+    render_status: Callable[[], None] | None = None,
 ) -> None:
     """Render the shared game board, controls, and move history."""
     with ui.row().classes(
@@ -53,3 +54,6 @@ def render_game_view(
         on_undo=on_undo,
         undo_label=undo_label,
     )
+
+    if render_status is not None:
+        render_status()

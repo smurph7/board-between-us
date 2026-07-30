@@ -162,6 +162,7 @@ def render_interactive_game(
     player_colour: Colour | None = None,
     initial_flipped: bool = False,
     load_external_state: LoadExternalState | None = None,
+    render_status: Callable[[], None] | None = None,
 ) -> None:
     """Render shared selection, movement, flipping, and refresh behaviour."""
     state = initial_state
@@ -549,6 +550,7 @@ def render_interactive_game(
                 if undo_target is not None
                 else "Undo"
             ),
+            render_status=render_status,
         )
     
     
