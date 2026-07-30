@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.models.game import Game
 from app.models.persisted_move import Move
-from app.models.move import MoveRecord
+from app.models.move import MoveRecord, MoveType
 from app.repositories.game_repository import get_game_for_update
 from app.repositories.move_repository import (
     create_move,
@@ -15,7 +15,15 @@ from app.repositories.move_repository import (
     list_moves
 )
 from app.repositories.player_repository import get_player
-from app.utils.board import apply_move, next_turn, piece_belongs_to, Colour
+from app.utils.board import (
+    CastleSide,
+    Colour,
+    apply_castle,
+    apply_move,
+    get_castling_movements,
+    next_turn,
+    piece_belongs_to,
+)
 
 class MoveError(Exception):
     """Base error for rejected moves."""
@@ -147,6 +155,105 @@ def make_move(
     )
     
 
+def make_castle(
+    session: Session,
+    *,
+    game_id: UUID,
+    player_id: UUID,
+    side: CastleSide,
+    expected_version: int,
+) -> CompletedMove:
+    """Apply and persist one compound castling action."""
+
+    game = get_game_for_update(session, game_id)
+
+    if game is None:
+        raise GameNotFoundError("Game does not exist")
+
+    player = get_player(session, player_id)
+
+    if player is None or player.game_id != game.id:
+        raise PlayerNotFoundError(
+            "Player does not belong to this game"
+        )
+
+    if game.version != expected_version:
+        raise StaleGameError(
+            "The board changed on another device"
+        )
+
+    if player.colour != game.current_turn:
+        raise WrongTurnError(
+            f"It is currently {game.current_turn}'s turn"
+        )
+
+    colour = cast(Colour, player.colour)
+    board_before = game.board_state.copy()
+
+    try:
+        board_after = apply_castle(
+            board_before,
+            colour=colour,
+            side=side,
+        )
+    except ValueError as error:
+        raise InvalidMoveError(str(error)) from error
+
+    king_move, rook_move = get_castling_movements(
+        colour,
+        side,
+    )
+
+    resulting_turn = next_turn(
+        cast(Colour, game.current_turn)
+    )
+
+    sequence_number = get_next_sequence_number(
+        session,
+        game.id,
+    )
+
+    move = create_move(
+        session,
+        game_id=game.id,
+        player_id=player.id,
+        sequence_number=sequence_number,
+        move_type="castle",
+        piece=king_move.piece,
+        from_square=king_move.from_square,
+        to_square=king_move.to_square,
+        captured_piece=None,
+        changes=[
+            {
+                "piece": king_move.piece,
+                "from": king_move.from_square,
+                "to": king_move.to_square,
+            },
+            {
+                "piece": rook_move.piece,
+                "from": rook_move.from_square,
+                "to": rook_move.to_square,
+            },
+        ],
+        board_state_before=board_before,
+        board_state_after=board_after,
+        previous_turn=game.current_turn,
+        resulting_turn=resulting_turn,
+    )
+
+    game.board_state = board_after
+    game.current_turn = resulting_turn
+    game.version += 1
+    game.updated_at = datetime.now(timezone.utc)
+
+    session.flush()
+
+    return CompletedMove(
+        game=game,
+        move=move,
+    )    
+    
+
 def get_move_history(
     session: Session,
     game_id: UUID,
@@ -161,15 +268,25 @@ def get_move_history(
             or move.to_square is None
         ):
             continue
-
+        
+        castle_side: CastleSide | None = None
+        if move.move_type == "castle":
+            castle_side = (
+                "kingside"
+                if move.to_square in {"g1", "g8"}
+                else "queenside"
+            )
+            
         records.append(
             MoveRecord(
                 number=move.sequence_number,
                 colour=cast(Colour, move.previous_turn),
+                move_type=cast(MoveType, move.move_type),
                 piece=move.piece,
                 from_square=move.from_square,
                 to_square=move.to_square,
                 captured_piece=move.captured_piece,
+                castle_side=castle_side,
             )
         )
 

@@ -15,10 +15,11 @@ from app.services.move_service import (
     MoveError,
     get_move_history,
     make_move,
+    make_castle,
 )
 from app.repositories.game_repository import get_game_version
 from app.utils.game_sync import game_version_changed
-from app.utils.board import Colour, Square
+from app.utils.board import CastleSide, Colour, Square
 
 
 @ui.page("/play/{game_id}/{access_token}")
@@ -142,6 +143,52 @@ def persisted_game_page(
                 state=latest_state or state,
                 error_message=str(error),
             )
+            
+    
+    def submit_persisted_castle(
+    side: CastleSide,
+    state: InteractiveGameState,
+) -> MoveSubmission:
+        """Persist one castle and return the latest shared state."""
+        nonlocal version
+
+        try:
+            with database_session() as session:
+                completed = make_castle(
+                    session,
+                    game_id=persisted_game_id,
+                    player_id=player_id,
+                    side=side,
+                    expected_version=version,
+                )
+
+                version = completed.game.version
+
+                updated_state = InteractiveGameState(
+                    board=completed.game.board_state.copy(),
+                    current_turn=cast(
+                        Colour,
+                        completed.game.current_turn,
+                    ),
+                    move_history=get_move_history(
+                        session,
+                        persisted_game_id,
+                    ),
+                )
+
+            return MoveSubmission(
+                state=updated_state,
+                success_message=f"Castled {side}",
+            )
+
+        except MoveError as error:
+            latest_state = load_current_state()
+
+            return MoveSubmission(
+                state=latest_state or state,
+                error_message=str(error),
+            )
+            
 
     def load_external_state() -> InteractiveGameState | None:
         """Return canonical state only when the persisted version changed."""
@@ -169,6 +216,7 @@ def persisted_game_page(
         title=game_name,
         initial_state=initial_state,
         submit_move=submit_persisted_move,
+        submit_castle=submit_persisted_castle,
         player_colour=player_colour,
         initial_flipped=player_colour == "black",
         load_external_state=load_external_state,

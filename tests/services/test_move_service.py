@@ -12,6 +12,7 @@ from app.services.move_service import (
     StaleGameError,
     WrongTurnError,
     make_move,
+    make_castle,
 )
 
 
@@ -24,6 +25,24 @@ def move_count(session: Session, game_id: UUID) -> int:
     )
 
     return count or 0
+
+
+def prepare_white_kingside_castle(
+    session: Session,
+    game_id: UUID,
+) -> None:
+    """Replace the board with a minimal White kingside castle position."""
+    game = get_game(session, game_id)
+
+    assert game is not None
+
+    game.board_state = {
+        "e1": "white_king",
+        "h1": "white_rook",
+        "e8": "black_king",
+    }
+
+    session.flush()
 
 
 def test_move_updates_board_turn_version_and_history(
@@ -217,3 +236,172 @@ def test_player_from_another_game_is_rejected(
         )
 
     assert move_count(db_session, first_game.game.id) == 0
+    
+    
+def test_castle_updates_board_turn_version_and_history(
+    db_session: Session,
+) -> None:
+    created = create_standard_game(db_session)
+    game_id = created.game.id
+
+    prepare_white_kingside_castle(
+        db_session,
+        game_id,
+    )
+
+    completed = make_castle(
+        db_session,
+        game_id=game_id,
+        player_id=created.white_player.id,
+        side="kingside",
+        expected_version=0,
+    )
+
+    assert completed.move.sequence_number == 1
+    assert completed.move.move_type == "castle"
+    assert completed.move.piece == "white_king"
+    assert completed.move.from_square == "e1"
+    assert completed.move.to_square == "g1"
+    assert completed.move.captured_piece is None
+    assert completed.move.changes == [
+        {
+            "piece": "white_king",
+            "from": "e1",
+            "to": "g1",
+        },
+        {
+            "piece": "white_rook",
+            "from": "h1",
+            "to": "f1",
+        },
+    ]
+
+    assert completed.move.board_state_before == {
+        "e1": "white_king",
+        "h1": "white_rook",
+        "e8": "black_king",
+    }
+
+    assert completed.move.board_state_after == {
+        "g1": "white_king",
+        "f1": "white_rook",
+        "e8": "black_king",
+    }
+
+    db_session.flush()
+    db_session.expire_all()
+
+    game = get_game(db_session, game_id)
+
+    assert game is not None
+    assert game.board_state == {
+        "g1": "white_king",
+        "f1": "white_rook",
+        "e8": "black_king",
+    }
+    assert game.current_turn == "black"
+    assert game.version == 1
+    assert move_count(db_session, game_id) == 1
+    
+
+def test_castle_with_missing_rook_is_rejected_without_changes(
+    db_session: Session,
+) -> None:
+    created = create_standard_game(db_session)
+    game_id = created.game.id
+
+    original_board = {
+        "e1": "white_king",
+        "e8": "black_king",
+    }
+
+    game = get_game(db_session, game_id)
+    assert game is not None
+
+    game.board_state = original_board.copy()
+    db_session.flush()
+
+    with pytest.raises(
+        InvalidMoveError,
+        match="Expected white_rook at h1",
+    ):
+        make_castle(
+            db_session,
+            game_id=game_id,
+            player_id=created.white_player.id,
+            side="kingside",
+            expected_version=0,
+        )
+
+    db_session.expire_all()
+    game = get_game(db_session, game_id)
+
+    assert game is not None
+    assert game.board_state == original_board
+    assert game.current_turn == "white"
+    assert game.version == 0
+    assert move_count(db_session, game_id) == 0
+    
+
+def test_castle_on_wrong_turn_is_rejected_without_changes(
+    db_session: Session,
+) -> None:
+    created = create_standard_game(db_session)
+    game_id = created.game.id
+
+    prepare_white_kingside_castle(
+        db_session,
+        game_id,
+    )
+
+    original_board = created.game.board_state.copy()
+
+    with pytest.raises(WrongTurnError):
+        make_castle(
+            db_session,
+            game_id=game_id,
+            player_id=created.black_player.id,
+            side="kingside",
+            expected_version=0,
+        )
+
+    db_session.expire_all()
+    game = get_game(db_session, game_id)
+
+    assert game is not None
+    assert game.board_state == original_board
+    assert game.current_turn == "white"
+    assert game.version == 0
+    assert move_count(db_session, game_id) == 0
+    
+
+def test_castle_with_stale_version_is_rejected_without_changes(
+    db_session: Session,
+) -> None:
+    created = create_standard_game(db_session)
+    game_id = created.game.id
+
+    prepare_white_kingside_castle(
+        db_session,
+        game_id,
+    )
+
+    original_board = created.game.board_state.copy()
+
+    with pytest.raises(StaleGameError):
+        make_castle(
+            db_session,
+            game_id=game_id,
+            player_id=created.white_player.id,
+            side="kingside",
+            expected_version=99,
+        )
+
+    db_session.expire_all()
+    game = get_game(db_session, game_id)
+
+    assert game is not None
+    assert game.board_state == original_board
+    assert game.current_turn == "white"
+    assert game.version == 0
+    assert move_count(db_session, game_id) == 0

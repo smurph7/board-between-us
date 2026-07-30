@@ -35,6 +35,7 @@ def game_page() -> None:
         move = MoveRecord(
             number=len(state.move_history) + 1,
             colour=state.current_turn,
+            move_type="move",
             piece=moving_piece,
             from_square=from_square,
             to_square=to_square,

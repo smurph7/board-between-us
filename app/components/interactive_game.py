@@ -1,17 +1,18 @@
 from collections.abc import Callable
 from dataclasses import dataclass
-
+from functools import partial
 from nicegui import ui
 
 from app.components.game_view import render_game_view
 from app.models.move import MoveRecord
 from app.utils.board import (
     BoardState,
+    CastleSide,
     Colour,
     Square,
+    can_castle,
     piece_belongs_to,
 )
-
 
 @dataclass(frozen=True)
 class InteractiveGameState:
@@ -33,6 +34,11 @@ class MoveSubmission:
 
 type SubmitMove = Callable[
     [Square, Square, InteractiveGameState],
+    MoveSubmission,
+]
+
+type SubmitCastle = Callable[
+    [CastleSide, InteractiveGameState],
     MoveSubmission,
 ]
 
@@ -77,6 +83,7 @@ def render_interactive_game(
     *,
     initial_state: InteractiveGameState,
     submit_move: SubmitMove,
+    submit_castle: SubmitCastle | None = None,
     title: str | None = None,
     player_colour: Colour | None = None,
     initial_flipped: bool = False,
@@ -90,6 +97,35 @@ def render_interactive_game(
     def active_colour() -> Colour:
         """Return the colour this page may currently select."""
         return player_colour or state.current_turn
+
+
+    def available_castle_sides() -> list[CastleSide]:
+        """Return castle actions available for the selected king."""
+
+        if submit_castle is None or selected_square is None:
+            return []
+
+        colour = active_colour()
+        selected_piece = state.board.get(selected_square)
+
+        if selected_piece != f"{colour}_king":
+            return []
+
+        sides: tuple[CastleSide, ...] = (
+            "kingside",
+            "queenside",
+        )
+
+        return [
+            side
+            for side in sides
+            if can_castle(
+                state.board,
+                colour=colour,
+                side=side,
+            )
+        ]
+
 
     def handle_square_click(square: Square) -> None:
         nonlocal state, selected_square
@@ -181,10 +217,102 @@ def render_interactive_game(
         game_view.refresh()
 
 
+    def show_castle_confirmation(side: CastleSide) -> None:
+        """Ask the player to confirm a compound castling action."""
+        nonlocal state, selected_square
+
+        if submit_castle is None:
+            return
+
+        colour = active_colour()
+        rank = "1" if colour == "white" else "8"
+
+        if side == "kingside":
+            king_move = f"e{rank} → g{rank}"
+            rook_move = f"h{rank} → f{rank}"
+        else:
+            king_move = f"e{rank} → c{rank}"
+            rook_move = f"a{rank} → d{rank}"
+
+        def confirm_castle() -> None:
+            nonlocal state, selected_square
+
+            result = submit_castle(
+                side,
+                state,
+            )
+
+            state = result.state
+            selected_square = None
+            dialog.close()
+
+            if result.success_message:
+                ui.notify(result.success_message)
+
+            if result.error_message:
+                ui.notify(
+                    result.error_message,
+                    type="negative",
+                )
+
+            game_view.refresh()
+
+        with ui.dialog() as dialog, ui.card():
+            ui.label(
+                f"Castle {side}?"
+            ).classes("text-h6")
+
+            ui.label(f"King {king_move}")
+            ui.label(f"Rook {rook_move}")
+
+            with ui.row().classes("w-full justify-end gap-2"):
+                ui.button(
+                    "Cancel",
+                    on_click=dialog.close,
+                ).props("flat")
+
+                ui.button(
+                    "Confirm castle",
+                    on_click=confirm_castle,
+                )
+
+        dialog.open()
+    
+
     @ui.refreshable
     def game_view() -> None:
         ui.label(title or "Board Between Us").classes("text-h5")
 
+        castle_sides = available_castle_sides()
+
+        if castle_sides:
+            ui.label("Special move").classes(
+                "text-subtitle2 mt-2"
+            )
+
+            with ui.row().classes(
+                "w-full gap-2 flex-wrap"
+            ) as castle_actions:
+                for side in castle_sides:
+                    label = (
+                        "Castle kingside"
+                        if side == "kingside"
+                        else "Castle queenside"
+                    )
+
+                    ui.button(
+                        label,
+                        on_click=partial(
+                            show_castle_confirmation,
+                            side,
+                        ),
+                    )
+
+            castle_actions.on(
+                "click",
+                js_handler="(event) => event.stopPropagation()",
+            )
+            
         render_game_view(
             board=state.board,
             selected_square=selected_square,
@@ -195,7 +323,8 @@ def render_interactive_game(
             on_flip=toggle_orientation,
             player_colour=player_colour,
         )
-
+    
+    
     with ui.column().classes("w-full min-h-screen").on(
         "click",
         clear_selection,
