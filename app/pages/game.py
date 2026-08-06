@@ -151,6 +151,7 @@ def persisted_game_page(
         )
         game_name = player_game.game.name
         game_status = player_game.game.status
+        ui.page_title(game_name or "Board Between Us")
         telegram_link_token = ensure_telegram_link_token(
             session,
             player_game.player,
@@ -497,6 +498,7 @@ def persisted_game_page(
             update_game_name(session, game, name=trimmed)
 
         game_name = trimmed
+        ui.page_title(game_name or "Board Between Us")
 
         return RenameResult(
             name=trimmed,
