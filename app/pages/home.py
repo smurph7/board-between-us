@@ -197,11 +197,6 @@ def home_page() -> None:
             ui.input(
                 label="Your name",
                 placeholder="e.g. Mark",
-                validation=lambda value: (
-                    "Your name is required"
-                    if not value.strip()
-                    else None
-                ),
             )
             .classes("w-full")
             .props('data-1p-ignore autocomplete="off"')
@@ -211,6 +206,15 @@ def home_page() -> None:
             ui.input(
                 label="Your opponent's name",
                 placeholder="e.g. Sarah",
+            )
+            .classes("w-full")
+            .props('data-1p-ignore autocomplete="off"')
+        )
+
+        board_name = (
+            ui.input(
+                label="Board name (optional)",
+                placeholder="e.g. Mark vs Sarah",
             )
             .classes("w-full")
             .props('data-1p-ignore autocomplete="off"')
@@ -232,18 +236,18 @@ def home_page() -> None:
         def handle_create_game() -> None:
             """Validate the form and create a persisted game."""
             creator_display_name = (
-                creator_name.value or ""
-            ).strip()
+                (creator_name.value or "").strip() or None
+            )
 
             opponent_display_name = (
                 (opponent_name.value or "").strip() or None
             )
 
-            selected_colour = creator_colour.value
+            board_display_name = (
+                (board_name.value or "").strip() or None
+            )
 
-            if not creator_display_name:
-                creator_name.validate()
-                return
+            selected_colour = creator_colour.value
 
             if selected_colour not in ("white", "black"):
                 ui.notify(
@@ -266,6 +270,7 @@ def home_page() -> None:
                 with database_session() as session:
                     created_links = create_game_for_players(
                         session,
+                        name=board_display_name,
                         creator_display_name=creator_display_name,
                         opponent_display_name=opponent_display_name,
                         creator_colour=cast(

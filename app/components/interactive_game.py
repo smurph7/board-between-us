@@ -56,6 +56,18 @@ type SubmitUndo = Callable[
     MoveSubmission,
 ]
 
+
+@dataclass(frozen=True)
+class RenameResult:
+    """Result returned after attempting to rename the board."""
+
+    name: str | None
+    success_message: str | None = None
+    error_message: str | None = None
+
+
+type SubmitRename = Callable[[str], RenameResult]
+
 @dataclass(frozen=True)
 class ExternalStateUpdate:
     """Result of applying a possible external game update."""
@@ -158,6 +170,7 @@ def render_interactive_game(
     submit_castle: SubmitCastle | None = None,
     submit_correction: SubmitCorrection | None = None,
     submit_undo: SubmitUndo | None = None,
+    submit_rename: SubmitRename | None = None,
     title: str | None = None,
     player_colour: Colour | None = None,
     initial_flipped: bool = False,
@@ -468,7 +481,59 @@ def render_interactive_game(
                 ).props(PRIMARY_BUTTON_PROPS)
 
         dialog.open()
-    
+
+
+    def show_rename_dialog() -> None:
+        """Ask the player for a new board name and persist it."""
+        nonlocal title
+
+        if submit_rename is None:
+            return
+
+        def confirm_rename() -> None:
+            nonlocal title
+
+            result = submit_rename(name_input.value or "")
+
+            title = result.name
+            dialog.close()
+
+            if result.success_message:
+                ui.notify(
+                    result.success_message,
+                    type="positive",
+                )
+
+            if result.error_message:
+                ui.notify(
+                    result.error_message,
+                    type="negative",
+                )
+
+            game_view.refresh()
+
+        with ui.dialog() as dialog, ui.card():
+            ui.label("Rename board").classes("text-h6")
+
+            name_input = ui.input(
+                label="Board name",
+                value=title or "",
+                placeholder="Board Between Us",
+            ).classes("w-full")
+
+            with ui.row().classes("w-full justify-end gap-2"):
+                ui.button(
+                    "Cancel",
+                    on_click=dialog.close,
+                ).props("flat")
+
+                ui.button(
+                    "Save",
+                    on_click=confirm_rename,
+                ).props(PRIMARY_BUTTON_PROPS)
+
+        dialog.open()
+
 
     @ui.refreshable
     def game_view() -> None:
@@ -485,9 +550,16 @@ def render_interactive_game(
             )
             return
         
-        ui.label(title or "Board Between Us").classes(
-            "text-h5 font-semibold"
-        )
+        with ui.row().classes("items-center gap-1"):
+            ui.label(title or "Board Between Us").classes(
+                "text-h5 font-semibold"
+            )
+
+            if submit_rename is not None:
+                ui.button(
+                    icon="edit",
+                    on_click=show_rename_dialog,
+                ).props("flat round dense size=sm")
 
         castle_sides = available_castle_sides()
 

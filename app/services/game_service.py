@@ -122,7 +122,7 @@ type StartMode = Literal["standard", "setup"]
 def create_game_for_players(
     session: Session,
     *,
-    creator_display_name: str,
+    creator_display_name: str | None,
     opponent_display_name: str | None,
     creator_colour: Colour,
     app_base_url: str,

@@ -47,6 +47,17 @@ def get_game(session: Session, game_id: UUID) -> Game | None:
     return session.get(Game, game_id)
 
 
+def update_game_name(
+    session: Session,
+    game: Game,
+    *,
+    name: str | None,
+) -> None:
+    """Update a game's display name."""
+    game.name = name
+    session.flush()
+
+
 def get_game_version(
     session: Session,
     game_id: UUID,

@@ -116,6 +116,7 @@ def build_move_notification(
     actor: Player,
     recipient: Player,
     app_base_url: str,
+    game_name: str | None = None,
 ) -> TelegramMessage | None:
     """Build an opponent notification for a supported committed move."""
     if move.move_type not in {"move", "capture", "castle"}:
@@ -130,6 +131,7 @@ def build_move_notification(
         return None
 
     actor_name = actor.display_name or actor.colour.title()
+    prefix = f"🎲 {game_name}\n\n" if game_name else ""
 
     if move.move_type == "castle":
         destination = move.to_square or ""
@@ -138,14 +140,14 @@ def build_move_notification(
             if destination.endswith("g1") or destination.endswith("g8")
             else "queenside"
         )
-        text = f"♟ {actor_name} castled {side}\n\nIt’s your turn."
+        text = f"{prefix}♟ {actor_name} castled {side}\n\nIt’s your turn."
     else:
         if move.piece is None or move.from_square is None or move.to_square is None:
             return None
         piece_name = move.piece.removeprefix(f"{actor.colour}_").title()
         separator = "×" if move.move_type == "capture" else "→"
         text = (
-            f"♟ {actor_name} moved\n\n"
+            f"{prefix}♟ {actor_name} moved\n\n"
             f"{piece_name}: {move.from_square} {separator} {move.to_square}\n\n"
             "It’s your turn."
         )

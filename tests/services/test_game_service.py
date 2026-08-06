@@ -215,6 +215,26 @@ def test_create_game_for_black_creator_assigns_correct_links(db_session: Session
     )
     
 
+def test_create_game_for_players_allows_blank_creator_name(
+    db_session: Session,
+) -> None:
+    result = create_game_for_players(
+        db_session,
+        creator_display_name=None,
+        opponent_display_name=None,
+        creator_colour="white",
+        app_base_url="https://example.test/",
+    )
+
+    players = db_session.scalars(
+        select(Player).where(Player.game_id == result.game.id)
+    ).all()
+    players_by_colour = {player.colour: player for player in players}
+
+    assert players_by_colour["white"].display_name is None
+    assert players_by_colour["black"].display_name is None
+
+
 def test_confirm_game_setup_saves_position_and_activates_game(
     db_session: Session,
 ) -> None:

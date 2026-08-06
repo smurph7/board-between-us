@@ -184,6 +184,33 @@ def test_build_ordinary_move_notification() -> None:
     )
 
 
+def test_build_move_notification_omits_prefix_without_game_name() -> None:
+    notification = build_move_notification(
+        move=move(),
+        actor=player(colour="white", display_name="Sarah"),
+        recipient=player(colour="black", chat_id="99"),
+        app_base_url="https://board.example",
+    )
+
+    assert notification is not None
+    assert notification.text == "♟ Sarah moved\n\nPawn: e2 → e4\n\nIt’s your turn."
+
+
+def test_build_move_notification_includes_game_name_when_set() -> None:
+    notification = build_move_notification(
+        move=move(),
+        actor=player(colour="white", display_name="Sarah"),
+        recipient=player(colour="black", chat_id="99"),
+        app_base_url="https://board.example",
+        game_name="Mark vs Sarah",
+    )
+
+    assert notification is not None
+    assert notification.text == (
+        "🎲 Mark vs Sarah\n\n♟ Sarah moved\n\nPawn: e2 → e4\n\nIt’s your turn."
+    )
+
+
 def test_build_capture_notification() -> None:
     notification = build_move_notification(
         move=move(

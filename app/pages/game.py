@@ -11,6 +11,7 @@ from app.config import get_settings
 from app.components.interactive_game import (
     InteractiveGameState,
     MoveSubmission,
+    RenameResult,
     latest_undoable_record,
     render_interactive_game,
 )
@@ -29,7 +30,11 @@ from app.services.move_service import (
     persisted_move_to_record,
     undo_latest_event,
 )
-from app.repositories.game_repository import get_game_version
+from app.repositories.game_repository import (
+    get_game,
+    get_game_version,
+    update_game_name,
+)
 from app.repositories.player_repository import (
     disconnect_telegram,
     ensure_telegram_link_token,
@@ -208,6 +213,7 @@ def persisted_game_page(
             actor=actor,
             recipient=recipient,
             app_base_url=settings.app_base_url,
+            game_name=game_name,
         )
 
     def load_current_state() -> InteractiveGameState | None:
@@ -473,6 +479,30 @@ def persisted_game_page(
                 elapsed_ms,
             )
 
+    def submit_persisted_rename(new_name: str) -> RenameResult:
+        """Persist a new board name and return the saved result."""
+        nonlocal game_name
+
+        trimmed = new_name.strip() or None
+
+        with database_session() as session:
+            game = get_game(session, persisted_game_id)
+
+            if game is None:
+                return RenameResult(
+                    name=game_name,
+                    error_message="Game not found",
+                )
+
+            update_game_name(session, game, name=trimmed)
+
+        game_name = trimmed
+
+        return RenameResult(
+            name=trimmed,
+            success_message="Board renamed",
+        )
+
     def load_external_state() -> InteractiveGameState | None:
         """Return canonical state only when the persisted version changed."""
         with database_session() as session:
@@ -616,6 +646,7 @@ def persisted_game_page(
         submit_castle=submit_persisted_castle,
         submit_correction=submit_persisted_correction,
         submit_undo=submit_persisted_undo,
+        submit_rename=submit_persisted_rename,
         player_colour=player_colour,
         initial_flipped=player_colour == "black",
         load_external_state=load_external_state,
