@@ -190,8 +190,22 @@ def send_telegram_message(
         response.raise_for_status()
         body = response.json()
         if not isinstance(body, dict) or body.get("ok") is not True:
-            logger.warning("Telegram rejected a message")
+            logger.warning(
+                "Telegram rejected a message: %s",
+                body.get("description") if isinstance(body, dict) else body,
+            )
             return False
+    except httpx.HTTPStatusError as error:
+        try:
+            description = error.response.json().get("description")
+        except ValueError:
+            description = error.response.text
+        logger.warning(
+            "Telegram message delivery failed (HTTP %s): %s",
+            error.response.status_code,
+            description,
+        )
+        return False
     except (httpx.HTTPError, ValueError) as error:
         logger.warning(
             "Telegram message delivery failed (%s)",

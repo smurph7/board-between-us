@@ -7,6 +7,7 @@ A shared visual chess notepad for two people playing an asynchronous game.
 Create and activate a virtual environment, then install the project:
 
 ```bash
+source .venv/bin/activate
 python -m pip install -e ".[dev]"
 ```
 

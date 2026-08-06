@@ -512,7 +512,9 @@ def render_interactive_game(
 
             game_view.refresh()
 
-        with ui.dialog() as dialog, ui.card():
+        with ui.dialog() as dialog, ui.card().classes(
+            "w-96 max-w-[90vw] gap-3"
+        ):
             ui.label("Rename board").classes("text-h6")
 
             name_input = ui.input(
