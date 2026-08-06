@@ -117,12 +117,9 @@ def set_notifications_enabled(
 def disconnect_telegram(
     session: Session,
     player: Player,
-    *,
-    replacement_token: str,
 ) -> None:
-    """Disconnect Telegram and revoke the previous Telegram link token."""
+    """Stop notifications without invalidating existing Telegram board links."""
     player.telegram_chat_id = None
     player.telegram_connected_at = None
     player.notifications_enabled = True
-    player.telegram_link_token = replacement_token
     session.flush()

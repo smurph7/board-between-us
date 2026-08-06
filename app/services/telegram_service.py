@@ -88,6 +88,20 @@ def parse_telegram_start(update: dict[str, Any]) -> TelegramStart | None:
     return TelegramStart(chat_id=str(chat_id), token=token)
 
 
+def _attach_chat_or_detect_conflict(
+    session: Session,
+    player: Player,
+    chat_id: str,
+) -> TelegramConnectionStatus:
+    """Attach a chat id to an unclaimed seat, or report why it can't be."""
+    if player.telegram_chat_id == chat_id:
+        return "already_connected"
+    if player.telegram_chat_id is not None:
+        return "conflict"
+    connect_telegram(session, player, chat_id=chat_id)
+    return "connected"
+
+
 def connect_player_from_telegram(
     session: Session,
     start: TelegramStart,
@@ -97,17 +111,25 @@ def connect_player_from_telegram(
     if player is None:
         return TelegramConnection(status="invalid_token")
 
-    if player.telegram_chat_id == start.chat_id:
-        return TelegramConnection(
-            status="already_connected",
-            player=player,
-        )
-
-    if player.telegram_chat_id is not None:
+    status = _attach_chat_or_detect_conflict(session, player, start.chat_id)
+    if status == "conflict":
         return TelegramConnection(status="conflict")
+    return TelegramConnection(status=status, player=player)
 
-    connect_telegram(session, player, chat_id=start.chat_id)
-    return TelegramConnection(status="connected", player=player)
+
+def attach_cached_telegram_chat(
+    session: Session,
+    *,
+    player: Player,
+    other_player: Player | None,
+    chat_id: str,
+) -> TelegramConnection:
+    """Auto-attach a device-cached chat id to a fresh, unconnected seat."""
+    if other_player is not None and other_player.telegram_chat_id == chat_id:
+        return TelegramConnection(status="conflict", player=player)
+
+    status = _attach_chat_or_detect_conflict(session, player, chat_id)
+    return TelegramConnection(status=status, player=player)
 
 
 def build_move_notification(

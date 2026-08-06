@@ -4,7 +4,7 @@ from time import perf_counter
 from typing import cast
 from uuid import UUID
 
-from nicegui import ui
+from nicegui import app, ui
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
@@ -44,6 +44,7 @@ from app.repositories.player_repository import (
 )
 from app.services.telegram_service import (
     TelegramMessage,
+    attach_cached_telegram_chat,
     build_move_notification,
     send_telegram_message,
     telegram_deep_link,
@@ -63,6 +64,7 @@ class TelegramPlayerStatus:
     link_token: str
     connected: bool
     notifications_enabled: bool
+    chat_id: str | None = None
 
 
 def append_persisted_move(
@@ -157,11 +159,38 @@ def persisted_game_page(
             player_game.player,
             token=generate_telegram_link_token(),
         )
+
+        if (
+            settings.storage_secret is not None
+            and player_game.player.telegram_chat_id is None
+        ):
+            cached_chat_id = app.storage.user.get("telegram_chat_id")
+            if cached_chat_id:
+                other_player = get_other_player(
+                    session,
+                    game_id=persisted_game_id,
+                    player_id=player_id,
+                )
+                attach_cached_telegram_chat(
+                    session,
+                    player=player_game.player,
+                    other_player=other_player,
+                    chat_id=cached_chat_id,
+                )
+
         initial_telegram_status = TelegramPlayerStatus(
             link_token=telegram_link_token,
             connected=player_game.player.telegram_chat_id is not None,
             notifications_enabled=player_game.player.notifications_enabled,
+            chat_id=player_game.player.telegram_chat_id,
         )
+
+        if (
+            settings.storage_secret is not None
+            and initial_telegram_status.connected
+            and initial_telegram_status.chat_id is not None
+        ):
+            app.storage.user["telegram_chat_id"] = initial_telegram_status.chat_id
 
         initial_state = InteractiveGameState(
             board=player_game.game.board_state.copy(),
@@ -179,6 +208,7 @@ def persisted_game_page(
 
     version = initial_version
     telegram_status = initial_telegram_status
+    telegram_panel_open = False
 
     def deliver_notification(
         message: TelegramMessage | None,
@@ -531,15 +561,23 @@ def persisted_game_page(
                 link_token=player.telegram_link_token,
                 connected=player.telegram_chat_id is not None,
                 notifications_enabled=player.notifications_enabled,
+                chat_id=player.telegram_chat_id,
             )
 
     def refresh_telegram_status() -> None:
         """Refresh Telegram controls when the webhook changes the seat."""
-        nonlocal telegram_status
+        nonlocal telegram_status, telegram_panel_open
         current = load_telegram_status()
         if current is None or current == telegram_status:
             return
         telegram_status = current
+        telegram_panel_open = False
+        if (
+            settings.storage_secret is not None
+            and current.connected
+            and current.chat_id is not None
+        ):
+            app.storage.user["telegram_chat_id"] = current.chat_id
         telegram_controls.refresh()
 
     def update_notification_preference(event) -> None:
@@ -561,30 +599,32 @@ def persisted_game_page(
         )
 
     def show_disconnect_confirmation() -> None:
-        """Confirm Telegram disconnection and credential revocation."""
+        """Confirm stopping Telegram notifications for this seat."""
         def confirm_disconnect() -> None:
-            nonlocal telegram_status
-            replacement_token = generate_telegram_link_token()
+            nonlocal telegram_status, telegram_panel_open
             with database_session() as session:
                 player = get_player(session, player_id)
                 if player is None:
                     return
-                disconnect_telegram(
-                    session,
-                    player,
-                    replacement_token=replacement_token,
-                )
-            telegram_status = TelegramPlayerStatus(
-                link_token=replacement_token,
+                disconnect_telegram(session, player)
+            if settings.storage_secret is not None:
+                app.storage.user.pop("telegram_chat_id", None)
+            telegram_status = replace(
+                telegram_status,
                 connected=False,
                 notifications_enabled=True,
+                chat_id=None,
             )
+            telegram_panel_open = False
             dialog.close()
             telegram_controls.refresh()
 
         with ui.dialog() as dialog, ui.card():
             ui.label("Disconnect Telegram?").classes("text-h6")
-            ui.label("Old Telegram board links will stop working.")
+            ui.label(
+                "You'll stop getting move notifications until you "
+                "reconnect. Existing Telegram board links keep working."
+            )
             with ui.row().classes("w-full justify-end gap-2"):
                 ui.button("Cancel", on_click=dialog.close).props("flat")
                 ui.button(
@@ -595,20 +635,51 @@ def persisted_game_page(
 
     @ui.refreshable
     def telegram_controls() -> None:
-        """Render seat-specific Telegram connection controls."""
-        with ui.expansion("Telegram", value=False).classes("w-full"):
-            with ui.column().classes("w-full gap-2 pb-2"):
+        """Render a Telegram badge in the top-right corner of the page."""
+        nonlocal telegram_panel_open
 
-                if (
-                    not settings.telegram_bot_token
-                    or not settings.telegram_bot_username
-                ):
-                    ui.label("Telegram is not configured.").classes(
+        if (
+            not settings.telegram_bot_token
+            or not settings.telegram_bot_username
+        ):
+            return
+
+        icon = (
+            "notifications_active"
+            if telegram_status.connected
+            else "notifications_off"
+        )
+        color = "positive" if telegram_status.connected else "grey-6"
+
+        def toggle_panel() -> None:
+            nonlocal telegram_panel_open
+            telegram_panel_open = not telegram_panel_open
+            panel.set_visibility(telegram_panel_open)
+            backdrop.set_visibility(telegram_panel_open)
+
+        def close_panel() -> None:
+            nonlocal telegram_panel_open
+            telegram_panel_open = False
+            panel.set_visibility(False)
+            backdrop.set_visibility(False)
+
+        backdrop = ui.element("div").classes("fixed inset-0 z-40").on(
+            "click", close_panel
+        )
+        backdrop.set_visibility(telegram_panel_open)
+
+        with ui.element("div").classes("absolute top-0 right-0 z-50"):
+            ui.button(icon=icon, on_click=toggle_panel).props(
+                f"round flat color={color}"
+            )
+            with ui.card().classes(
+                "absolute right-0 top-full mt-2 gap-2 p-3 w-56 z-50"
+            ) as panel:
+                panel.set_visibility(telegram_panel_open)
+                if not telegram_status.connected:
+                    ui.label("Telegram not connected").classes(
                         "text-sm text-grey-7"
                     )
-                    return
-
-                if not telegram_status.connected:
                     deep_link = telegram_deep_link(
                         settings.telegram_bot_username,
                         telegram_status.link_token,
@@ -619,21 +690,20 @@ def persisted_game_page(
                             deep_link,
                             new_tab=True,
                         ),
-                    ).props("outline color=primary")
-                    return
-
-                ui.label("Telegram connected").classes(
-                    "text-sm text-positive"
-                )
-                ui.switch(
-                    "Move notifications",
-                    value=telegram_status.notifications_enabled,
-                    on_change=update_notification_preference,
-                )
-                ui.button(
-                    "Disconnect Telegram",
-                    on_click=show_disconnect_confirmation,
-                ).props("flat color=negative")
+                    ).classes("w-full").props("outline color=primary")
+                else:
+                    ui.label("Telegram connected").classes(
+                        "text-sm text-positive"
+                    )
+                    ui.switch(
+                        "Move notifications",
+                        value=telegram_status.notifications_enabled,
+                        on_change=update_notification_preference,
+                    )
+                    ui.button(
+                        "Disconnect Telegram",
+                        on_click=show_disconnect_confirmation,
+                    ).props("flat color=negative")
 
     if game_status == "setup":
         ui.label(

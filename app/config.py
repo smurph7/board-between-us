@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     telegram_bot_token: str | None = None
     telegram_bot_username: str | None = None
     telegram_webhook_secret: str | None = None
+    storage_secret: str | None = None
 
     model_config = SettingsConfigDict(
         env_file=".env",

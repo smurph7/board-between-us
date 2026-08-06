@@ -12,6 +12,7 @@ from app.models.player import Player
 from app.services.telegram_service import (
     TelegramStart,
     TelegramMessage,
+    attach_cached_telegram_chat,
     build_move_notification,
     connect_player_from_telegram,
     parse_telegram_start,
@@ -138,8 +139,57 @@ def test_connect_player_is_idempotent_and_rejects_another_chat(
     assert connected.status == "connected"
     assert repeated.status == "already_connected"
     assert conflict.status == "conflict"
+    assert conflict.player is None
     assert created.white_player.telegram_chat_id == "100"
     assert created.white_player.telegram_connected_at is not None
+
+
+def test_attach_cached_telegram_chat_connects_unclaimed_seat(
+    db_session: Session,
+) -> None:
+    created = create_standard_game(db_session)
+
+    result = attach_cached_telegram_chat(
+        db_session,
+        player=created.white_player,
+        other_player=created.black_player,
+        chat_id="100",
+    )
+    repeated = attach_cached_telegram_chat(
+        db_session,
+        player=created.white_player,
+        other_player=created.black_player,
+        chat_id="100",
+    )
+    rejected = attach_cached_telegram_chat(
+        db_session,
+        player=created.white_player,
+        other_player=created.black_player,
+        chat_id="200",
+    )
+
+    assert result.status == "connected"
+    assert repeated.status == "already_connected"
+    assert rejected.status == "conflict"
+    assert created.white_player.telegram_chat_id == "100"
+
+
+def test_attach_cached_telegram_chat_rejects_other_seat_in_same_game(
+    db_session: Session,
+) -> None:
+    created = create_standard_game(db_session)
+    created.black_player.telegram_chat_id = "100"
+    db_session.flush()
+
+    result = attach_cached_telegram_chat(
+        db_session,
+        player=created.white_player,
+        other_player=created.black_player,
+        chat_id="100",
+    )
+
+    assert result.status == "conflict"
+    assert created.white_player.telegram_chat_id is None
 
 
 def test_connect_player_rejects_unknown_token(

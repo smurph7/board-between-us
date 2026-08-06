@@ -552,9 +552,12 @@ def render_interactive_game(
             )
             return
         
-        with ui.row().classes("items-center gap-1"):
+        if render_status is not None:
+            render_status()
+
+        with ui.row(wrap=False).classes("items-center gap-1 min-w-0"):
             ui.label(title or "Board Between Us").classes(
-                "text-h5 font-semibold"
+                "text-h5 font-semibold truncate min-w-0"
             )
 
             if submit_rename is not None:
@@ -624,7 +627,6 @@ def render_interactive_game(
                 if undo_target is not None
                 else "Undo"
             ),
-            render_status=render_status,
         )
     
     
